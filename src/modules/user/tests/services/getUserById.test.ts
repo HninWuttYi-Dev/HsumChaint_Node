@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import { type User } from 'prisma-client';
+import type { User } from 'prisma-client';
 import { prisma } from '@/lib/prisma';
+import { redis } from '@/lib/redis';
 import { getUserByIdService } from '../../user.service';
 
 /**
@@ -53,7 +54,7 @@ const mockDonor = {
   phone: '09111111111',
   name: 'test_donor',
   email: 'donor@test.com',
-  roleId: 1,
+  roleId: 2,
   isDeleted: false,
   monkProfile: null, // Donors never have a monkProfile
 };
@@ -76,6 +77,16 @@ describe('getUserByIdService Unit Test (Mocking)', () => {
   // Without this, a mockResolvedValue() from one test could affect the next.
   beforeEach(() => {
     findFirstMock.mockClear();
+  });
+  it('reloads profiles cached before the schema upgrade', async () => {
+    spyOn(redis, 'get').mockResolvedValueOnce(JSON.stringify({
+      id: mockDonor.id, username: 'old_name', userType: 'Donor',
+    }));
+    findFirstMock.mockResolvedValue(mockDonor as unknown as User);
+    const result = await getUserByIdService({ id: mockDonor.id });
+    expect(result.name).toBe(mockDonor.name);
+    expect(result.roleId).toBe(2);
+    expect(findFirstMock).toHaveBeenCalled();
   });
 
   // Happy path for Monks: verifies the service returns the user AND

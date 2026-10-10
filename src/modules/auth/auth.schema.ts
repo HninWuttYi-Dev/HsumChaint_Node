@@ -26,7 +26,7 @@ export const registerSchema = z.object({
       contactPhone: phoneSchema.optional(),
       avatar: z.string().optional(),
       password: passwordSchema,
-      roleId: z.number(),
+      roleId: z.union([z.literal(1), z.literal(2)]),
       monasteryName: z.string().optional(),
       monasteryAddress: z.string().optional(),
       fcmToken: z.string().optional(),

@@ -10,11 +10,9 @@ import type { CreateDonorType, GetAllDonorsQueryType, UpdateDonorType } from './
 export async function createDonorService(data: CreateDonorType) {
   const { name, email, phoneNo } = data.body;
 
-  const existingDonor = await prisma.user.findFirst({
+  const existingDonor = await prisma.donor.findFirst({
     where: {
-      OR: [{ email: email || undefined }, ...(phoneNo ? [{ phone: phoneNo }] : [])],
-      roleId: 2,
-      isDeleted: false
+      OR: [{ email }, ...(phoneNo ? [{ phoneNo }] : [])],
     },
   });
 
@@ -22,13 +20,11 @@ export async function createDonorService(data: CreateDonorType) {
     throw new BadRequestError('A donor with this email or phone number already exists');
   }
 
-  return prisma.user.create({
+  return prisma.donor.create({
     data: {
       name,
       email,
-      phone: phoneNo ?? '',
-      password: '', // placeholder, since users need passwords now
-      roleId: 2,
+      phoneNo: phoneNo ?? '',
     },
   });
 }
@@ -41,20 +37,29 @@ export async function getAllDonorsService(
   const { name, email, phoneNo } = query;
   const { page, limit } = pagination;
 
-  const where: Prisma.UserWhereInput = { roleId: 2, isDeleted: false };
+  const where: Prisma.DonorWhereInput = {};
 
-  if (name && name.trim() !== '') where.name = { contains: name.trim() };
-  if (email && email.trim() !== '') where.email = { contains: email.trim() };
-  if (phoneNo && phoneNo.trim() !== '') where.phone = { contains: phoneNo.trim() };
+  // search by each field
+  if (name && name.trim() !== '') {
+    where.name = { contains: name.trim() };
+  }
+
+  if (email && email.trim() !== '') {
+    where.email = { contains: email.trim() };
+  }
+
+  if (phoneNo && phoneNo.trim() !== '') {
+    where.phoneNo = { contains: phoneNo.trim() };
+  }
 
   const [donors, total] = await Promise.all([
-    prisma.user.findMany({
+    prisma.donor.findMany({
       where,
       skip: (page - 1) * limit,
       take: limit,
       orderBy: { createdAt: 'desc' },
     }),
-    prisma.user.count({ where }),
+    prisma.donor.count({ where }),
   ]);
 
   const paginationData = generatePaginationData(req, total, page, limit);
@@ -63,31 +68,53 @@ export async function getAllDonorsService(
 }
 
 export async function getDonorByIdService(id: number) {
-  const donor = await prisma.user.findUnique({
+  const donor = await prisma.donor.findUnique({
     where: { id },
   });
-  if (!donor || donor.roleId !== 2 || donor.isDeleted) throw new NotFoundError('Donor not found');
+
+  if (!donor) {
+    throw new NotFoundError('Donor not found');
+  }
+
   return donor;
 }
 
 export async function updateDonorService(id: number, data: UpdateDonorType) {
   const { name, email, phoneNo } = data.body;
-  const donor = await prisma.user.findUnique({ where: { id } });
-  if (!donor || donor.roleId !== 2 || donor.isDeleted) throw new NotFoundError('Donor not found');
 
-  return prisma.user.update({
+  const donor = await prisma.donor.findUnique({ where: { id } });
+
+  if (!donor) {
+    throw new NotFoundError('Donor not found');
+  }
+
+  if (email && email !== donor.email) {
+    const emailTaken = await prisma.donor.findFirst({
+      where: { email, NOT: { id } },
+    });
+    if (emailTaken) {
+      throw new BadRequestError('A donor with this email already exists');
+    }
+  }
+
+  return prisma.donor.update({
     where: { id },
     data: {
       ...(name && { name }),
       ...(email && { email }),
-      ...(phoneNo && { phone: phoneNo }),
+      ...(phoneNo && { phoneNo }),
     },
   });
 }
 
 export async function deleteDonorService(id: number) {
-  const donor = await prisma.user.findUnique({ where: { id } });
-  if (!donor || donor.roleId !== 2 || donor.isDeleted) throw new NotFoundError('Donor not found');
+  const donor = await prisma.donor.findUnique({ where: { id } });
 
-  return prisma.user.update({ where: { id }, data: { isDeleted: true } });
+  if (!donor) {
+    throw new NotFoundError('Donor not found');
+  }
+
+  await prisma.donor.delete({ where: { id } });
+
+  return donor;
 }

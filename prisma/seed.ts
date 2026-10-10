@@ -2,6 +2,9 @@ import { prisma } from "../src/lib/prisma";
 import { logger } from "../src/utils/logger";
 async function userSeeder() {
   logger.info("Seeding users");
+  for (const role of [{ id: 1, name: "Monk" }, { id: 2, name: "Donor" }]) {
+    await prisma.role.upsert({ where: { id: role.id }, update: {}, create: role });
+  }
   const password = await Bun.password.hash("password123");
   for (let i = 0; i < 5; i++) {
     const phone = `0912345678${i}`;
@@ -10,10 +13,10 @@ async function userSeeder() {
       update: {},
       create: {
         phone,
-        username: `testUser${i}`,
+        name: `testUser${i}`,
         password,
         email: `test${i}@gmail.com`,
-        userType: i % 2 === 0 ? "Monk" : "Donor",
+        roleId: i % 2 === 0 ? 1 : 2,
       },
     });
   }

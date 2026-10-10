@@ -97,7 +97,11 @@ const getUserWithProfile = async (id: number) => {
     //when found, convert string back to object
     if (cachedUser) {
       try {
-        return JSON.parse(cachedUser);
+        const profile = JSON.parse(cachedUser);
+        // Ignore the pre-migration username/userType cache shape.
+        if (typeof profile.name === 'string' && typeof profile.roleId === 'number') {
+          return profile;
+        }
       } catch {
         await redis.del(cachedKey); // cleanup bad cache
       }

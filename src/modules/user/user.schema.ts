@@ -37,7 +37,7 @@ export const getAllUsersSchema = z.object({
     email: z.string().trim().toLowerCase().optional(),
     phone: normalizePhoneSearch,
     contactPhone: normalizePhoneSearch,
-    roleId: z.number().optional(),
+    roleId: z.coerce.number().int().positive().optional(),
     monasteryName: z.string().optional(),
     monasteryAddress: z.string().optional(),
   }),

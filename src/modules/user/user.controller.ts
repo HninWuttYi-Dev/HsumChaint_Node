@@ -22,6 +22,7 @@ export const getAllUsers = async (req: Request, res: Response, next: NextFunctio
       ...rawQuery,
       page,
       limit,
+      roleId: rawQuery.roleId === undefined ? undefined : Number(rawQuery.roleId),
     };
     const { users, totals } = await getAllUserService(queryData);
 

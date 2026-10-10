@@ -148,6 +148,11 @@ export const refreshTokenService = async (refreshToken: string) => {
   }
   // Use a transaction to ensure we revoke the old and create the new session safely
   return await prisma.$transaction(async (tx) => {
+    const user = await tx.user.findFirst({
+      where: { id: payload.userId, isDeleted: false },
+      select: { roleId: true },
+    });
+    if (!user) throw new AppError('Invalid refresh token', 401);
     await tx.refreshToken.update({
       where: { id: storedToken.id },
       data: { revokedAt: new Date() },
@@ -156,7 +161,7 @@ export const refreshTokenService = async (refreshToken: string) => {
     const { accessToken, refreshToken: newRefreshToken } = await createAuthSession(
       tx,
       payload.userId,
-      payload.roleId
+      user.roleId
     );
     return { accessToken, refreshToken: newRefreshToken };
   });

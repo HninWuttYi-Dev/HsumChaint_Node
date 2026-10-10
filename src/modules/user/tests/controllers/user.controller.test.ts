@@ -127,12 +127,15 @@ describe('UserController Unit Test (Mocking)', () => {
     countMock.mockResolvedValue(1);
 
     const response = await request(app)
-      .get('/api/v1/users?page=1&limit=10')
+      .get('/api/v1/users?page=1&limit=10&roleId=2')
       .set('Authorization', accessToken);
 
     expect(response.status).toBe(200);
     expect(Array.isArray(response.body.data.users)).toBe(true);
     expect(response.body.data.paginationData).toBeDefined();
+    expect(findManyMock).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ roleId: 2 }),
+    }));
   });
 
   // Zod validation: bad input is rejected by validation middleware BEFORE

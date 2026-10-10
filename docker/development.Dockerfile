@@ -14,4 +14,4 @@ COPY . .
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "until bun prisma db push; do echo 'Waiting for database...'; sleep 2; done && bun run dev"]
+CMD ["sh", "-c", "bun prisma migrate deploy && bun run dev"]
