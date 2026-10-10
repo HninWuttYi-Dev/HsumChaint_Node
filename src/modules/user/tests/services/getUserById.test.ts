@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import { type User, UserType } from 'prisma-client';
+import type { User } from 'prisma-client';
 import { prisma } from '@/lib/prisma';
+import { redis } from '@/lib/redis';
 import { getUserByIdService } from '../../user.service';
 
 /**
@@ -51,9 +52,9 @@ const findFirstMock = spyOn(prisma.user, 'findFirst');
 const mockDonor = {
   id: 1,
   phone: '09111111111',
-  username: 'test_donor',
+  name: 'test_donor',
   email: 'donor@test.com',
-  userType: UserType.Monk,
+  roleId: 2,
   isDeleted: false,
   monkProfile: null, // Donors never have a monkProfile
 };
@@ -61,9 +62,9 @@ const mockDonor = {
 const mockMonk = {
   id: 2,
   phone: '09222222222',
-  username: 'test_monk',
+  name: 'test_monk',
   email: 'monk@test.com',
-  userType: UserType.Monk,
+  roleId: 1,
   isDeleted: false,
   monkProfile: {
     monasteryName: 'Golden Monastery',
@@ -77,6 +78,16 @@ describe('getUserByIdService Unit Test (Mocking)', () => {
   beforeEach(() => {
     findFirstMock.mockClear();
   });
+  it('reloads profiles cached before the schema upgrade', async () => {
+    spyOn(redis, 'get').mockResolvedValueOnce(JSON.stringify({
+      id: mockDonor.id, username: 'old_name', userType: 'Donor',
+    }));
+    findFirstMock.mockResolvedValue(mockDonor as unknown as User);
+    const result = await getUserByIdService({ id: mockDonor.id });
+    expect(result.name).toBe(mockDonor.name);
+    expect(result.roleId).toBe(2);
+    expect(findFirstMock).toHaveBeenCalled();
+  });
 
   // Happy path for Monks: verifies the service returns the user AND
   // correctly exposes the nested monkProfile relation.
@@ -86,7 +97,7 @@ describe('getUserByIdService Unit Test (Mocking)', () => {
     const result = await getUserByIdService({ id: mockMonk.id });
 
     expect(result).not.toBeNull();
-    expect(result?.username).toBe('test_monk');
+    expect(result?.name).toBe('test_monk');
     expect(result?.monkProfile?.monasteryName).toBe('Golden Monastery');
   });
 
@@ -98,7 +109,7 @@ describe('getUserByIdService Unit Test (Mocking)', () => {
     const result = await getUserByIdService({ id: mockDonor.id });
 
     expect(result).not.toBeNull();
-    expect(result?.username).toBe('test_donor');
+    expect(result?.name).toBe('test_donor');
     expect(result?.monkProfile).toBeNull();
   });
 

@@ -12,10 +12,10 @@ import type { getAllUsersInput, idParamsInput, updateUserBodyInput } from './use
 export const selectUser = {
   id: true,
   phone: true,
-  username: true,
+  name: true,
   email: true,
   contactPhone: true,
-  userType: true,
+  roleId: true,
   createdAt: true,
   avatar: true,
 } as const;
@@ -34,11 +34,11 @@ export const getAllUserService = async (data: getAllUsersInput) => {
   const {
     page,
     limit,
-    username,
+    name,
     email,
     phone,
     contactPhone,
-    userType,
+    roleId,
     monasteryName,
     monasteryAddress,
   } = data;
@@ -47,11 +47,11 @@ export const getAllUserService = async (data: getAllUsersInput) => {
   const where: Prisma.UserWhereInput = { isDeleted: false };
 
   // Build filters
-  if (username) where.username = { startsWith: username };
+  if (name) where.name = { startsWith: name };
   if (phone) where.phone = { startsWith: phone };
   if (email) where.email = { contains: email };
   if (contactPhone) where.contactPhone = { startsWith: contactPhone };
-  if (userType) where.userType = userType;
+  if (roleId) where.roleId = roleId;
   //create empty object to add both monastery address and monastery name
   // Build Monk Profile filters
   const monkProfileFilter: Prisma.MonkProfileWhereInput = {};
@@ -60,8 +60,8 @@ export const getAllUserService = async (data: getAllUsersInput) => {
   //after collect all data add into where object
   if (Object.keys(monkProfileFilter).length > 0) {
     where.monkProfile = { is: monkProfileFilter };
-    // If filtering by monastery but no userType provided, default to Monk
-    if (!userType) where.userType = 'Monk';
+    // If filtering by monastery but no roleId provided, default to Monk (1)
+    if (!roleId) where.roleId = 1;
   }
 
   // Transaction ensures the count and the data list are in sync
@@ -97,7 +97,11 @@ const getUserWithProfile = async (id: number) => {
     //when found, convert string back to object
     if (cachedUser) {
       try {
-        return JSON.parse(cachedUser);
+        const profile = JSON.parse(cachedUser);
+        // Ignore the pre-migration username/userType cache shape.
+        if (typeof profile.name === 'string' && typeof profile.roleId === 'number') {
+          return profile;
+        }
       } catch {
         await redis.del(cachedKey); // cleanup bad cache
       }
@@ -146,7 +150,7 @@ export const updateUserService = async (id: number, data: updateUserBodyInput) =
 
   // 2. Build User Update Payload
   const updateData: Prisma.UserUpdateInput = {
-    ...(data.username !== undefined && { username: data.username }),
+    ...(data.name !== undefined && { name: data.name }),
     ...(data.email !== undefined && { email: data.email }),
     ...(data.phone !== undefined && { phone: data.phone }),
     ...(hashedPassword !== undefined && { password: hashedPassword }),
@@ -162,7 +166,7 @@ export const updateUserService = async (id: number, data: updateUserBodyInput) =
 
   if (Object.keys(monkProfileData).length > 0) {
     // Business rule: only Monk users are allowed to update monastery info
-    if (user.userType !== 'Monk') {
+    if (user.roleId !== 1) {
       throw new AppError('Only monks can update monastery info', 400);
     }
     // Prisma nested update for related monkProfile table

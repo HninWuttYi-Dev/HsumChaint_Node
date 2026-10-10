@@ -22,6 +22,7 @@ export const getAllUsers = async (req: Request, res: Response, next: NextFunctio
       ...rawQuery,
       page,
       limit,
+      roleId: rawQuery.roleId === undefined ? undefined : Number(rawQuery.roleId),
     };
     const { users, totals } = await getAllUserService(queryData);
 
@@ -75,12 +76,12 @@ export const deleteUser = async (req: Request, res: Response, next: NextFunction
   try {
     const params = req.params as unknown as idParamsInput;
     const deletedUser = await softDeleteUserService(params);
-    const { id, username } = deletedUser;
+    const { id, name } = deletedUser;
 
     return successResponse(
       res,
-      { id, username },
-      `User Account: ${username} has been deleted successfully`
+      { id, name },
+      `User Account: ${name} has been deleted successfully`
     );
   } catch (err) {
     next(err);

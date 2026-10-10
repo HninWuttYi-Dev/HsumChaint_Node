@@ -10,8 +10,15 @@ export const authMiddleware = (req: Request, _res: Response, next: NextFunction)
   }
   const accessToken = authorization.split(' ')[1];
   try {
-    const user = jwt.verify(accessToken, env.JWT_ACCESS_TOKEN_SECRET) as TokenPayload;
-    if (!user.userId || !user.userType) {
+    const user = jwt.verify(accessToken, env.JWT_ACCESS_TOKEN_SECRET) as TokenPayload & {
+      userType?: string;
+    };
+    // Keep signed sessions issued before the role migration usable until expiry.
+    if (user.roleId === undefined) {
+      if (user.userType === 'Monk') user.roleId = 1;
+      if (user.userType === 'Donor') user.roleId = 2;
+    }
+    if (!user.userId || !user.roleId) {
       return next(new AppError('Invalid token payload', 401));
     }
     req.user = user;

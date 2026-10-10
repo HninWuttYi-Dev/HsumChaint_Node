@@ -5,15 +5,13 @@ WORKDIR /app
 COPY package.json bun.lock* ./
 COPY prisma ./prisma/
 
-# Pre-install prisma for faster migrations
-RUN bun add -d prisma @prisma/client dotenv
-
-RUN apt-get update && apt-get install -y curl && \
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends curl openssl ca-certificates && \
     bun install && \
-    bunx prisma generate
+    bun prisma generate
 
 COPY . .
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "until bunx prisma db push; do echo 'Waiting for database...'; sleep 2; done && bun run dev"]
+CMD ["sh", "-c", "bun prisma migrate deploy && bun run dev"]

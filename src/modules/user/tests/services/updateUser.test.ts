@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 // 1. Import types from Prisma Client
-import { type MonkProfile, type User, UserType } from 'prisma-client';
+import { type MonkProfile, type User } from 'prisma-client';
 import { prisma } from '@/lib/prisma';
 import { updateUserService } from '../../user.service';
 
@@ -15,7 +15,7 @@ import { updateUserService } from '../../user.service';
  *  3. Bun.password           — verify() checks old password, hash() hashes new one
  *
  * The service handles several distinct update scenarios in one function:
- *  - Basic field updates (username, avatar, etc.)
+ *  - Basic field updates (name, avatar, etc.)
  *  - Nested relation updates (monkProfile.monasteryName)
  *  - Password changes (requires old password verification before hashing new one)
  *
@@ -71,12 +71,12 @@ describe('updateUserService Unit Test (Mocking)', () => {
    */
   const mockUser: UserWithProfile = {
     id: 222,
-    username: 'banana_monk',
+    name: 'banana_monk',
     email: 'banana@test.com',
     phone: '09123456789',
     contactPhone: '09111111111',
     password: 'hashed_password_in_db',
-    userType: UserType.Monk,
+    roleId: 1,
     avatar: null,
     fcmToken: null, // FIX: Added fcmToken because it's required in schema
     isDeleted: false,
@@ -92,15 +92,15 @@ describe('updateUserService Unit Test (Mocking)', () => {
   it('should update basic user info correctly', async () => {
     // No more 'as any' — the mock matches the expected return type
     findUniqueMock.mockResolvedValue(mockUser);
-    updateMock.mockResolvedValue({ ...mockUser, username: 'updated_banana' });
+    updateMock.mockResolvedValue({ ...mockUser, name: 'updated_banana' });
 
-    const result = await updateUserService(222, { username: 'updated_banana' });
+    const result = await updateUserService(222, { name: 'updated_banana' });
 
-    expect(result.username).toBe('updated_banana');
+    expect(result.name).toBe('updated_banana');
     expect(updateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 222 },
-        data: expect.objectContaining({ username: 'updated_banana' }),
+        data: expect.objectContaining({ name: 'updated_banana' }),
       })
     );
   });
@@ -184,7 +184,7 @@ describe('updateUserService Unit Test (Mocking)', () => {
   it('should throw an error when trying to update with invalid user ID', async () => {
     findUniqueMock.mockResolvedValue(null);
 
-    await expect(updateUserService(999, { username: 'ghost' })).rejects.toThrow(
+    await expect(updateUserService(999, { name: 'ghost' })).rejects.toThrow(
       'User is not found'
     );
 

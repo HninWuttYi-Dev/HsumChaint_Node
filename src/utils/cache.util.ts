@@ -30,5 +30,5 @@ export const clearUserListCache = async () => {
  * in different insertion orders.
  */
 export const buildListCacheKey = (data: Record<string, unknown>): string => {
-  return `users:list:${JSON.stringify(data, Object.keys(data as object).sort())}`;
+  return `users:list:v2:${JSON.stringify(data, Object.keys(data as object).sort())}`;
 };

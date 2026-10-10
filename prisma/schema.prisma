@@ -7,27 +7,210 @@ datasource db {
   provider = "mysql"
 }
 
-model User {
-  id           Int                  @id @default(autoincrement())
-  phone        String               @unique
-  username     String
-  email        String?              @unique
-  password     String
-  userType     UserType             @map("user_type")
-  fcmToken     String?              @map("fcm_token")
-  createdAt    DateTime             @default(now()) @map("created_at")
-  updatedAt    DateTime             @updatedAt @map("updated_at")
-  isDeleted    Boolean              @default(false) @map("is_deleted")
-  contactPhone String?
-  avatar       String?
-  monkProfile  MonkProfile?
-  resetToken   PasswordResetToken[]
-  refreshToken RefreshToken[]
+model Role {
+  id              Int               @id @default(autoincrement())
+  name            String            @db.VarChar(50)
+  isDeleted       Boolean           @default(false) @map("is_deleted")
+  
+  users           User[]
+  rolePermissions RolePermission[]
+  
+  @@map("Role")
+}
 
-  @@index([isDeleted, userType, createdAt(sort: Desc)])
-  @@index([username])
-  @@index([contactPhone])
+model Permission {
+  id              Int               @id @default(autoincrement())
+  name            String            @db.VarChar(50)
+  isDeleted       Boolean           @default(false) @map("is_deleted")
+  
+  rolePermissions RolePermission[]
+  
+  @@map("Permission")
+}
+
+model RolePermission {
+  id            Int         @id @default(autoincrement())
+  roleId        Int         @map("role_id")
+  permissionId  Int         @map("permission_id")
+  
+  role          Role        @relation(fields: [roleId], references: [id])
+  permission    Permission  @relation(fields: [permissionId], references: [id])
+  
+  @@map("Role_Permission")
+}
+
+model User {
+  id            Int       @id @default(autoincrement())
+  roleId        Int       @map("role_id")
+  name          String    @db.VarChar(255)
+  phone         String    @unique @db.VarChar(191)
+  password      String    @db.VarChar(255)
+  email         String?   @unique @db.VarChar(255)
+  contactPhone  String?   @map("contact_phone") @db.VarChar(191)
+  fcmToken      String?   @map("fcm_token") @db.VarChar(255)
+  avatar        String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  isDeleted     Boolean   @default(false) @map("is_deleted")
+  
+  role          Role      @relation(fields: [roleId], references: [id])
+  
+  monkProfile         MonkProfile?
+  monasterySpaces     MonasterySpace[]  @relation("SpaceCreator")
+  monasteryMembers    MonasteryMember[]
+  donorLists          DonorList[]       @relation("DonorUser")
+  reviewedDonations   DonorList[]       @relation("ReviewerUser")
+  notifications       Notification[]
+  refreshTokens       RefreshToken[]
+  userSetting         UserSetting?
+  invitationsSent     Invitation[]      @relation("InvitedByUser")
+  invitationsReceived Invitation[]      @relation("InvitedUser")
+  passwordResetTokens PasswordResetToken[]
+  
+  @@index([isDeleted, roleId, createdAt(sort: Desc)], map: "users_is_deleted_user_type_created_at_idx")
+  @@index([name], map: "users_username_idx")
+  @@index([contactPhone], map: "users_contactPhone_idx")
   @@map("users")
+}
+
+model MonkProfile {
+  id               Int    @id @default(autoincrement())
+  userId           Int    @unique @map("user_id")
+  monasteryName    String @map("monastery_name") @db.VarChar(255)
+  monasteryAddress String @map("monastery_address") @db.VarChar(500)
+  
+  user             User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([monasteryName])
+  @@index([monasteryAddress])
+  @@map("monk_profile")
+}
+
+model MonasterySpace {
+  id              Int      @id @default(autoincrement())
+  monasteryName   String   @map("monastery_name") @db.VarChar(255)
+  description     String?  @db.VarChar(1000)
+  address         String?  @db.VarChar(500)
+  createdById     Int      @map("created_by_id")
+  
+  createdBy       User     @relation("SpaceCreator", fields: [createdById], references: [id])
+  
+  members         MonasteryMember[]
+  donorLists      DonorList[]
+  invitations     Invitation[]
+  
+  @@map("Monastery_Space")
+}
+
+model MonasteryMember {
+  id               Int            @id @default(autoincrement())
+  userId           Int            @map("user_id")
+  monasterySpaceId Int            @map("monastery_space_id")
+  role             Int
+  isOwner          Boolean        @default(false) @map("is_owner")
+  
+  user             User           @relation(fields: [userId], references: [id])
+  monasterySpace   MonasterySpace @relation(fields: [monasterySpaceId], references: [id])
+  
+  @@map("Monastery_Member")
+}
+
+model DonorList {
+  id                  Int       @id @default(autoincrement())
+  monasterySpaceId    Int       @map("monastery_space_id")
+  donorId             Int       @map("donor_id")
+  donorName           String?   @map("donor_name") @db.VarChar(255)
+  donationType        String?   @map("donation_type") @db.VarChar(100)
+  donationTypeValue   Int       @map("donation_type_value")
+  customDonationType  String?   @map("custom_donation_type") @db.VarChar(255)
+  note                String?   @db.VarChar(1000)
+  amount              Decimal?  @db.Decimal(18, 2)
+  quantity            Decimal?  @db.Decimal(18, 2)
+  status              String?   @db.VarChar(100)
+  statusValue         Int       @map("status_value")
+  reviewerId          Int?      @map("reviewer_id")
+  
+  createdAt           DateTime  @default(now()) @map("created_at")
+  reviewedAt          DateTime? @map("reviewed_at")
+  pickupTime          DateTime? @map("pickup_time")
+  dropoffTime         DateTime? @map("dropoff_time")
+  completedAt         DateTime? @map("completed_at")
+  
+  monasterySpace      MonasterySpace @relation(fields: [monasterySpaceId], references: [id])
+  donor               User           @relation("DonorUser", fields: [donorId], references: [id])
+  reviewer            User?          @relation("ReviewerUser", fields: [reviewerId], references: [id])
+  
+  @@map("Donor_List")
+}
+
+model Notification {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  type        Int
+  message     String?  @db.VarChar(1000)
+  isRead      Boolean  @default(false) @map("is_read")
+  isDeleted   Boolean  @default(false) @map("is_deleted")
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  user        User     @relation(fields: [userId], references: [id])
+  
+  @@map("Notification")
+}
+
+model RefreshToken {
+  id           Int       @id @default(autoincrement())
+  userId       Int       @map("user_id")
+  refreshToken String    @unique @map("refresh_token") @db.VarChar(512)
+  expiresAt    DateTime? @map("expires_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  revokedAt    DateTime? @map("revoked_at")
+  
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([refreshToken, userId, revokedAt])
+  @@index([userId], map: "refresh_tokens_user_id_fkey")
+  @@map("refresh_tokens")
+}
+
+model Invitation {
+  id               Int      @id @default(autoincrement())
+  monasterySpaceId Int      @map("monastery_space_id")
+  invitedUserId    Int      @map("invited_user_id")
+  invitedById      Int      @map("invited_by_id")
+  role             Int
+  status           Int
+  createdAt        DateTime @default(now()) @map("created_at")
+  
+  monasterySpace   MonasterySpace @relation(fields: [monasterySpaceId], references: [id])
+  invitedUser      User           @relation("InvitedUser", fields: [invitedUserId], references: [id])
+  invitedBy        User           @relation("InvitedByUser", fields: [invitedById], references: [id])
+  
+  @@map("Invitation")
+}
+
+model UserSetting {
+  id                      Int       @id @default(autoincrement())
+  userId                  Int       @unique @map("user_id")
+  pickupTime              DateTime? @map("pickup_time")
+  dropoffTime             DateTime? @map("dropoff_time")
+  pickupNotificationTime  DateTime? @map("pickup_notification_time")
+  dropoffNotificationTime DateTime? @map("dropoff_notification_time")
+  
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("User_Setting")
+}
+
+model PasswordResetToken {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  resetToken String   @unique @map("reset_token")
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "password_reset_tokens_user_id_fkey")
+  @@map("password_reset_tokens")
 }
 
 model Donor {
@@ -90,48 +273,6 @@ model DonationType {
   @@map("donation_types")
 }
 
-model RefreshToken {
-  id           Int       @id @default(autoincrement())
-  userId       Int       @map("user_id")
-  refreshToken String    @unique @map("refresh_token")
-  expiresAt    DateTime  @map("expires_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  revokedAt    DateTime? @map("revoked_at")
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([refreshToken, userId, revokedAt])
-  @@index([userId], map: "refresh_tokens_user_id_fkey")
-  @@map("refresh_tokens")
-}
-
-model MonkProfile {
-  id               Int    @id @default(autoincrement())
-  userId           Int    @unique @map("user_id")
-  monasteryName    String @map("monastery_name")
-  monasteryAddress String @map("monastery_address")
-  user             User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([monasteryName])
-  @@index([monasteryAddress])
-  @@map("monk_profile")
-}
-
-model PasswordResetToken {
-  id         Int      @id @default(autoincrement())
-  userId     Int      @map("user_id")
-  resetToken String   @unique @map("reset_token")
-  expiresAt  DateTime @map("expires_at")
-  createdAt  DateTime @default(now()) @map("created_at")
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId], map: "password_reset_tokens_user_id_fkey")
-  @@map("password_reset_tokens")
-}
-
-enum UserType {
-  Monk
-  Donor
-}
 
 enum DonationStatus {
   Pending
