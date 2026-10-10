@@ -37,19 +37,19 @@ export const registerUser = async (data: RegisterInput) => {
     const user = await tx.user.create({
       data: {
         phone: data.phone,
-        username: data.username,
+        name: data.name,
         email: data.email,
         password: hashedPassword,
-        userType: data.userType,
+        roleId: data.roleId,
         contactPhone: data.contactPhone,
         avatar: data.avatar,
       },
       select: {
         id: true,
         phone: true,
-        username: true,
+        name: true,
         email: true,
-        userType: true,
+        roleId: true,
         createdAt: true,
         contactPhone: true,
         avatar: true,
@@ -57,7 +57,7 @@ export const registerUser = async (data: RegisterInput) => {
     });
     let monkProfile = null;
     //if the use is Monk create monk profile
-    if (user.userType === 'Monk') {
+    if (user.roleId === 1) {
       if (!data.monasteryName || !data.monasteryAddress) {
         throw new AppError('Monastery name and address are required for Monk users', 400);
       }
@@ -70,14 +70,14 @@ export const registerUser = async (data: RegisterInput) => {
       });
     }
     //create tokens for auto login after register
-    const { accessToken, refreshToken } = await createAuthSession(tx, user.id, user.userType);
+    const { accessToken, refreshToken } = await createAuthSession(tx, user.id, user.roleId);
     return { accessToken, refreshToken, user, monkProfile };
   });
   // Warm the /me cache immediately after register —
   // user is auto-logged in, their next request will be GET /me
   const profileData = {
     ...result.user,
-    monkProfile: result.user.userType === 'Monk' ? result.monkProfile : null,
+    monkProfile: result.user.roleId === 1 ? result.monkProfile : null,
   };
   try {
     await redis.set(`user:${result.user.id}:profile`, JSON.stringify(profileData), 'EX', 3600);
@@ -101,20 +101,20 @@ export const loginUser = async (data: LoginInput) => {
   if (!isPasswordMatch) {
     throw new AppError('Invalid phone or password', 401);
   }
-  const { accessToken, refreshToken } = await createAuthSession(prisma, user.id, user.userType);
+  const { accessToken, refreshToken } = await createAuthSession(prisma, user.id, user.roleId);
   // Warm the /me cache so the first authenticated request is free
   const profileCacheKey = `user:${user.id}:profile`;
   const profileData = {
     id: user.id,
     phone: user.phone,
-    username: user.username,
+    name: user.name,
     email: user.email,
-    userType: user.userType,
+    roleId: user.roleId,
     contactPhone: user.contactPhone,
     avatar: user.avatar,
     createdAt: user.createdAt,
     //if the user is Monk, return the monkProfile
-    monkProfile: user.userType === 'Monk' ? user.monkProfile : null,
+    monkProfile: user.roleId === 1 ? user.monkProfile : null,
   };
   try {
     await redis.set(profileCacheKey, JSON.stringify(profileData), 'EX', 3600);
@@ -156,7 +156,7 @@ export const refreshTokenService = async (refreshToken: string) => {
     const { accessToken, refreshToken: newRefreshToken } = await createAuthSession(
       tx,
       payload.userId,
-      payload.userType
+      payload.roleId
     );
     return { accessToken, refreshToken: newRefreshToken };
   });

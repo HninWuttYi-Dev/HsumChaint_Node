@@ -11,7 +11,7 @@ export const authMiddleware = (req: Request, _res: Response, next: NextFunction)
   const accessToken = authorization.split(' ')[1];
   try {
     const user = jwt.verify(accessToken, env.JWT_ACCESS_TOKEN_SECRET) as TokenPayload;
-    if (!user.userId || !user.userType) {
+    if (!user.userId || !user.roleId) {
       return next(new AppError('Invalid token payload', 401));
     }
     req.user = user;

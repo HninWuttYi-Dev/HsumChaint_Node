@@ -7,10 +7,10 @@ import type { prisma } from '../lib/prisma';
 export const createAuthSession = async (
   tx: Prisma.TransactionClient | typeof prisma,
   userId: TokenPayload['userId'],
-  userType: TokenPayload['userType']
+  roleId: TokenPayload['roleId']
 ) => {
-  const accessToken = generateAccessToken({ userId, userType });
-  const refreshToken = generateRefreshToken({ userId, userType });
+  const accessToken = generateAccessToken({ userId, roleId });
+  const refreshToken = generateRefreshToken({ userId, roleId });
   await tx.refreshToken.create({
     data: {
       userId,

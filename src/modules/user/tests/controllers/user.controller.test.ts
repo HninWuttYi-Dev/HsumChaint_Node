@@ -29,10 +29,10 @@ import { generateAccessToken, type TokenPayload } from '@/utils/jwt';
 const FAKE_USER_ID = 999;
 const FAKE_USER = {
   id: FAKE_USER_ID,
-  username: 'api_test_user',
+  name: 'api_test_user',
   email: 'controller@test.com',
   phone: '09111111111',
-  userType: 'Monk',
+  roleId: 1,
   isDeleted: false,
   monkProfile: {
     monasteryName: 'Test Monastery',
@@ -76,7 +76,7 @@ describe('UserController Unit Test (Mocking)', () => {
   beforeAll(() => {
     // Real JWT with fake userId — authMiddleware validates signature only,
     // not whether the userId exists in the DB.
-    const payload: TokenPayload = { userId: FAKE_USER_ID, userType: 'Monk' };
+    const payload: TokenPayload = { userId: FAKE_USER_ID, roleId: 1 };
     accessToken = `Bearer ${generateAccessToken(payload)}`;
   });
 
@@ -100,8 +100,8 @@ describe('UserController Unit Test (Mocking)', () => {
     expect(response.body.data).toMatchObject({
       id: FAKE_USER_ID,
       email: 'controller@test.com',
-      username: 'api_test_user',
-      userType: 'Monk',
+      name: 'api_test_user',
+      roleId: 1,
       monkProfile: {
         monasteryName: 'Test Monastery',
         monasteryAddress: 'Test Address',
@@ -142,7 +142,7 @@ describe('UserController Unit Test (Mocking)', () => {
       .put(`/api/v1/users/${FAKE_USER_ID}`)
       .set('Authorization', accessToken)
       .send({
-        username: 'hi', // too short — Zod rejects
+        name: 'hi', // too short — Zod rejects
         email: 'wrong-email', // invalid format — Zod rejects
       });
 
@@ -157,16 +157,16 @@ describe('UserController Unit Test (Mocking)', () => {
     findUniqueMock.mockResolvedValue(FAKE_USER as unknown as User);
     updateMock.mockResolvedValue({
       ...FAKE_USER,
-      username: 'updated_api_user',
+      name: 'updated_api_user',
     } as unknown as User);
 
     const response = await request(app)
       .put(`/api/v1/users/${FAKE_USER_ID}`)
       .set('Authorization', accessToken)
-      .send({ username: 'updated_api_user', contactPhone: '09888888888' });
+      .send({ name: 'updated_api_user', contactPhone: '09888888888' });
 
     expect(response.status).toBe(200);
-    expect(response.body.data.username).toBe('updated_api_user');
+    expect(response.body.data.name).toBe('updated_api_user');
   });
 
   // Soft delete: service sets isDeleted:true, controller returns success message.

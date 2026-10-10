@@ -69,17 +69,17 @@ describe('getAllUserService Unit Test (Mocking)', () => {
     {
       id: 1,
       phone: '09111111111',
-      username: 'apple_donor',
+      name: 'apple_donor',
       email: 'apple@test.com',
-      userType: 'Donor',
+      roleId: 2,
       isDeleted: false,
     },
     {
       id: 2,
       phone: '09222222222',
-      username: 'banana_monk',
+      name: 'banana_monk',
       email: 'banana@test.com',
-      userType: 'Monk',
+      roleId: 1,
       isDeleted: false,
       monkProfile: {
         monasteryName: 'Su Taung Pyae',
@@ -89,9 +89,9 @@ describe('getAllUserService Unit Test (Mocking)', () => {
     {
       id: 3,
       phone: '09333333333',
-      username: 'cherry_donor',
+      name: 'cherry_donor',
       email: 'cherry@test.com',
-      userType: 'Donor',
+      roleId: 2,
       isDeleted: false,
     },
   ];
@@ -108,19 +108,19 @@ describe('getAllUserService Unit Test (Mocking)', () => {
     expect(result.totals).toBe(3);
   });
 
-  // Verifies that passing `username` causes the service to return
-  // only users whose username contains the search string (partial match).
-  it('should filter users by partial username', async () => {
+  // Verifies that passing `name` causes the service to return
+  // only users whose name contains the search string (partial match).
+  it('should filter users by partial name', async () => {
     findManyMock.mockResolvedValue([mockUsers[0]] as unknown as User[]); // fake: DB matched only apple_donor
     countMock.mockResolvedValue(1);
 
     const result = await getAllUserService({
       page: 1,
       limit: 10,
-      username: 'app', // partial match for "apple_donor"
+      name: 'app', // partial match for "apple_donor"
     });
 
-    expect(result.users[0].username).toBe('apple_donor');
+    expect(result.users[0].name).toBe('apple_donor');
     expect(result.totals).toBe(1);
   });
 
@@ -136,7 +136,7 @@ describe('getAllUserService Unit Test (Mocking)', () => {
       monasteryName: 'Su Taung', // partial match for "Su Taung Pyae"
     });
 
-    expect(result.users[0].username).toBe('banana_monk');
+    expect(result.users[0].name).toBe('banana_monk');
     expect(result.totals).toBe(1);
   });
 
@@ -164,7 +164,7 @@ describe('getAllUserService Unit Test (Mocking)', () => {
     const result = await getAllUserService({
       page: 1,
       limit: 10,
-      username: 'non_existent',
+      name: 'non_existent',
     });
 
     expect(result.users.length).toBe(0);
@@ -187,21 +187,21 @@ describe('getAllUserService Unit Test (Mocking)', () => {
     expect(result.totals).toBe(1);
   });
 
-  // Verifies that passing `userType` filters out users of other types,
+  // Verifies that passing `roleId` filters out users of other types,
   // and that every returned user matches the requested type.
-  it('should filter users by userType (Donor)', async () => {
-    const donors = mockUsers.filter((u) => u.userType === 'Donor'); // [apple_donor, cherry_donor]
+  it('should filter users by roleId (Donor)', async () => {
+    const donors = mockUsers.filter((u) => u.roleId === 2); // [apple_donor, cherry_donor]
     findManyMock.mockResolvedValue(donors as unknown as User[]);
     countMock.mockResolvedValue(2);
 
     const result = await getAllUserService({
       page: 1,
       limit: 10,
-      userType: 'Donor',
+      roleId: 2,
     });
 
     expect(result.users.length).toBe(2);
-    expect(result.users.every((u: { userType: string }) => u.userType === 'Donor')).toBe(true);
+    expect(result.users.every((u: { roleId: number }) => u.roleId === 2)).toBe(true);
   });
 
   // Verifies correct offset calculation for page 2.

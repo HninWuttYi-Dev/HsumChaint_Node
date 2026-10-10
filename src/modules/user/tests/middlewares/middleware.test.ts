@@ -41,7 +41,7 @@ describe('authMiddleware Unit Test', () => {
   });
   //Test case 3: Valid Token
   it('should attach user to req and call next() if token is valid', () => {
-    const payload: TokenPayload = { userId: 1, userType: 'Monk' };
+    const payload: TokenPayload = { userId: 1, roleId: 1 };
     const token = generateAccessToken(payload);
     mockReq.headers.authorization = `Bearer ${token}`;
     authMiddleware(

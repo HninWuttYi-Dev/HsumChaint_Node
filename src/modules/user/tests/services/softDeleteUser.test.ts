@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import { type User, UserType } from 'prisma-client';
+import { type User } from 'prisma-client';
 import { prisma } from '@/lib/prisma';
 import { softDeleteUserService } from '../../user.service';
 
@@ -60,11 +60,11 @@ describe('softDeleteUserService Unit Test (Mocking)', () => {
    */
   const mockUser = {
     id: 444,
-    username: 'ghost_user',
+    name: 'ghost_user',
     email: 'ghost@test.com',
     isDeleted: false,
     phone: '09123456789',
-    userType: UserType.Monk,
+    roleId: 1,
     contactPhone: '09111111111',
     password: 'hashed_password',
     createdAt: new Date(),
@@ -84,7 +84,7 @@ describe('softDeleteUserService Unit Test (Mocking)', () => {
     const result = await softDeleteUserService({ id: 444 });
 
     // Assert the returned data is correct
-    expect(result.username).toBe('ghost_user');
+    expect(result.name).toBe('ghost_user');
 
     // Assert update was called with exactly the right payload —
     // this confirms the service isn't sending extra/wrong fields.

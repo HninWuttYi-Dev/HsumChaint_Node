@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import { env } from '@/config/env';
 export interface TokenPayload {
   userId: number;
-  userType: 'Monk' | 'Donor';
+  roleId: number;
 }
 export const generateAccessToken = (payload: TokenPayload): string => {
   return jwt.sign(payload, env.JWT_ACCESS_TOKEN_SECRET, {

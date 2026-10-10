@@ -18,21 +18,22 @@ export const registerSchema = z.object({
   body: z
     .object({
       phone: phoneSchema,
-      username: z
-        .string('username is required')
+      name: z
+        .string('name is required')
         .trim()
-        .min(3, 'Username must be at least 3 characters'),
+        .min(3, 'Name must be at least 3 characters'),
       email: z.string().trim().toLowerCase().email('Invalid email').optional(),
       contactPhone: phoneSchema.optional(),
       avatar: z.string().optional(),
       password: passwordSchema,
-      userType: z.enum(['Monk', 'Donor']),
+      roleId: z.number(),
       monasteryName: z.string().optional(),
       monasteryAddress: z.string().optional(),
       fcmToken: z.string().optional(),
     })
     .superRefine((data, ctx) => {
-      if (data.userType === 'Monk') {
+      // Assuming roleId 1 is Monk
+      if (data.roleId === 1) {
         //add custom issue to monasteryName
         if (!data.monasteryName) {
           ctx.addIssue({
