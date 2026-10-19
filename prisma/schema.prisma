@@ -23,10 +23,77 @@ model User {
   isDeleted    Boolean  @default(false) @map("is_deleted")
   refreshToken RefreshToken[]
   resetToken   PasswordResetToken[]
+  ownedSpaces MonasterySpace[]
+  spaceMemberships SpaceMembership[]
+  systemRoles SystemRoleAssignment[]
   @@index([isDeleted, userType, createdAt(sort: Desc)])
   @@index([username])
   @@index([contactPhone])
   @@map("users")
+}
+
+model MonasterySpace {
+  id Int @id @default(autoincrement())
+  name String @db.VarChar(191)
+  description String? @db.Text
+  ownerId Int @map("owner_id")
+  revision Int @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  owner User @relation(fields: [ownerId], references: [id])
+  roles Role[]
+  members SpaceMembership[]
+  @@map("monastery_spaces")
+}
+
+model Role {
+  id Int @id @default(autoincrement())
+  name String @db.VarChar(191)
+  spaceId Int? @map("space_id")
+  space MonasterySpace? @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  permissions RolePermission[]
+  members SpaceMembership[]
+  systemAssignments SystemRoleAssignment[]
+  @@unique([spaceId, name])
+  @@unique([id, spaceId])
+  @@map("roles")
+}
+
+model Permission {
+  key String @id @db.VarChar(191)
+  roles RolePermission[]
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId Int @map("role_id")
+  permissionKey String @map("permission_key") @db.VarChar(191)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionKey], references: [key])
+  @@id([roleId, permissionKey])
+  @@map("role_permissions")
+}
+
+model SpaceMembership {
+  spaceId Int @map("space_id")
+  userId Int @map("user_id")
+  roleId Int @map("role_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  space MonasterySpace @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId, spaceId], references: [id, spaceId])
+  @@id([spaceId, userId])
+  @@index([roleId, spaceId])
+  @@map("space_memberships")
+}
+
+model SystemRoleAssignment {
+  userId Int @map("user_id")
+  roleId Int @map("role_id")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  @@id([userId, roleId])
+  @@map("system_role_assignments")
 }
 
 enum UserType {
