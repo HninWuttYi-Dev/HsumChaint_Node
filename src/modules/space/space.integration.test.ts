@@ -5,6 +5,18 @@ import { createSpaceService } from './space.service';
 
 // Explicit opt-in: use a disposable MySQL database with migrations already applied.
 const databaseUrl = process.env.SPACE_TEST_DATABASE_URL;
+
+async function expectFailure(operation: Promise<unknown>, message?: string) {
+  // Await real database I/O before asserting; Bun's rejection matcher can stall it on Windows.
+  let failure: unknown;
+  try {
+    await operation;
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toBeInstanceOf(Error);
+  if (message) expect((failure as Error).message).toContain(message);
+}
 describe.skipIf(!databaseUrl)('space RBAC MySQL integration', () => {
   let db: PrismaClient;
   const users: number[] = [];
@@ -55,14 +67,16 @@ describe.skipIf(!databaseUrl)('space RBAC MySQL integration', () => {
     await service.setMember(users[0], a.id, users[2], editor.id, true);
     await service.setMember(users[1], b.id, users[2], viewer.id, true);
     await service.authorize(users[2], a.id, 'Space.Post.Create');
-    await expect(service.authorize(users[2], b.id, 'Space.Post.Create')).rejects.toThrow(
+    await expectFailure(
+      service.authorize(users[2], b.id, 'Space.Post.Create'),
       'Space permission denied'
     );
-    await expect(service.setMember(users[0], a.id, users[1], viewer.id, true)).rejects.toThrow(
+    await expectFailure(
+      service.setMember(users[0], a.id, users[1], viewer.id, true),
       'Space role not found'
     );
     // The composite FK also enforces scope against direct database writes.
-    await expect(
+    await expectFailure(
       db.spaceMembership.create({
         data: {
           spaceId: a.id,
@@ -70,21 +84,20 @@ describe.skipIf(!databaseUrl)('space RBAC MySQL integration', () => {
           roleId: viewer.id,
         },
       })
-    ).rejects.toThrow();
+    );
     await service.saveRole(
       users[0],
       a.id,
       { name: editor.name, permissions: ['Space.View'] },
       editor.id
     );
-    await expect(service.authorize(users[2], a.id, 'Space.Post.Create')).rejects.toThrow(
+    await expectFailure(
+      service.authorize(users[2], a.id, 'Space.Post.Create'),
       'Space permission denied'
     );
     expect(await db.rolePermission.findMany({ where: { roleId: viewer.id } })).toHaveLength(1);
     await service.removeMember(users[0], a.id, users[2]);
-    await expect(service.authorize(users[2], a.id, 'Space.View')).rejects.toThrow(
-      'Space permission denied'
-    );
+    await expectFailure(service.authorize(users[2], a.id, 'Space.View'), 'Space permission denied');
     await service.authorize(users[2], b.id, 'Space.View');
   });
 });
