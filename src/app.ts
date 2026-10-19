@@ -10,6 +10,7 @@ import { globalErrorHandler } from './middlewares/errorHandler';
 import { httpLogger } from './middlewares/httpLogger';
 import authRoutes from './modules/auth/auth.routes';
 import healthRoutes from './modules/health/health.routes';
+import { spaceRouter } from './modules/space/space.routes';
 import { userRouter } from './modules/user/user.routes';
 import { errorResponse } from './utils/response';
 
@@ -37,6 +38,7 @@ app.use(cookieParser());
 app.use(httpLogger);
 // Routes
 app.use('/api/v1/users', userRouter);
+app.use('/api/v1/spaces', spaceRouter);
 app.use('/api/v1/auth', authRoutes);
 app.use('/health', healthRoutes);
 
