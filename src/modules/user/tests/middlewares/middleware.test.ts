@@ -17,10 +17,17 @@ describe('authMiddleware Unit Test', () => {
     next = vi.fn(); //mock function to track calls to next()
   });
   it('preserves signed pre-migration Monk and Donor sessions', () => {
-    for (const [userType, roleId] of [['Monk', 1], ['Donor', 2]] as const) {
+    for (const [userType, roleId] of [
+      ['Monk', 1],
+      ['Donor', 2],
+    ] as const) {
       const token = jwt.sign({ userId: 1, userType }, env.JWT_ACCESS_TOKEN_SECRET);
       mockReq.headers.authorization = `Bearer ${token}`;
-      authMiddleware(mockReq as unknown as Request, mockRes as unknown as Response, next as NextFunction);
+      authMiddleware(
+        mockReq as unknown as Request,
+        mockRes as unknown as Response,
+        next as NextFunction
+      );
       expect(mockReq.user).toMatchObject({ userId: 1, roleId });
     }
   });

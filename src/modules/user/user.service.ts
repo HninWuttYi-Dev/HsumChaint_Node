@@ -31,17 +31,8 @@ export const getAllUserService = async (data: getAllUsersInput) => {
   } catch (error) {
     console.error('Redis Get List Error', error);
   }
-  const {
-    page,
-    limit,
-    name,
-    email,
-    phone,
-    contactPhone,
-    roleId,
-    monasteryName,
-    monasteryAddress,
-  } = data;
+  const { page, limit, name, email, phone, contactPhone, roleId, monasteryName, monasteryAddress } =
+    data;
   const skip = (page - 1) * limit;
   //check the existing data
   const where: Prisma.UserWhereInput = { isDeleted: false };
