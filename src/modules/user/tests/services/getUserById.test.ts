@@ -79,9 +79,13 @@ describe('getUserByIdService Unit Test (Mocking)', () => {
     findFirstMock.mockClear();
   });
   it('reloads profiles cached before the schema upgrade', async () => {
-    spyOn(redis, 'get').mockResolvedValueOnce(JSON.stringify({
-      id: mockDonor.id, username: 'old_name', userType: 'Donor',
-    }));
+    spyOn(redis, 'get').mockResolvedValueOnce(
+      JSON.stringify({
+        id: mockDonor.id,
+        username: 'old_name',
+        userType: 'Donor',
+      })
+    );
     findFirstMock.mockResolvedValue(mockDonor as unknown as User);
     const result = await getUserByIdService({ id: mockDonor.id });
     expect(result.name).toBe(mockDonor.name);

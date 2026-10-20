@@ -18,10 +18,7 @@ export const registerSchema = z.object({
   body: z
     .object({
       phone: phoneSchema,
-      name: z
-        .string('name is required')
-        .trim()
-        .min(3, 'Name must be at least 3 characters'),
+      name: z.string('name is required').trim().min(3, 'Name must be at least 3 characters'),
       email: z.string().trim().toLowerCase().email('Invalid email').optional(),
       contactPhone: phoneSchema.optional(),
       avatar: z.string().optional(),

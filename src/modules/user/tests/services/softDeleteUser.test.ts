@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import { type User } from 'prisma-client';
+import type { User } from 'prisma-client';
 import { prisma } from '@/lib/prisma';
 import { softDeleteUserService } from '../../user.service';
 

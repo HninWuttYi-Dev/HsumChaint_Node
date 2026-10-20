@@ -9,7 +9,7 @@ datasource db {
 
 model Role {
   id              Int               @id @default(autoincrement())
-  name            String            @db.VarChar(50)
+  name            String            @unique(map: "role_name_unique") @db.VarChar(50)
   isDeleted       Boolean           @default(false) @map("is_deleted")
   
   users           User[]
@@ -20,7 +20,7 @@ model Role {
 
 model Permission {
   id              Int               @id @default(autoincrement())
-  name            String            @db.VarChar(50)
+  name            String            @unique(map: "permission_name_unique") @db.VarChar(50)
   isDeleted       Boolean           @default(false) @map("is_deleted")
   
   rolePermissions RolePermission[]
@@ -33,9 +33,12 @@ model RolePermission {
   roleId        Int         @map("role_id")
   permissionId  Int         @map("permission_id")
   
-  role          Role        @relation(fields: [roleId], references: [id])
-  permission    Permission  @relation(fields: [permissionId], references: [id])
+  role          Role        @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission    Permission  @relation(fields: [permissionId], references: [id], onDelete: Cascade)
   
+  @@unique([roleId, permissionId], map: "role_permission_role_id_permission_id_unique")
+  @@index([roleId], map: "role_permission_role_id_idx")
+  @@index([permissionId], map: "role_permission_permission_id_idx")
   @@map("Role_Permission")
 }
 
@@ -92,6 +95,7 @@ model MonasterySpace {
   description     String?  @db.VarChar(1000)
   address         String?  @db.VarChar(500)
   createdById     Int      @map("created_by_id")
+  isDeleted       Boolean  @default(false) @map("is_deleted")
   
   createdBy       User     @relation("SpaceCreator", fields: [createdById], references: [id])
   
@@ -99,6 +103,8 @@ model MonasterySpace {
   donorLists      DonorList[]
   invitations     Invitation[]
   
+  @@index([createdById], map: "monastery_space_created_by_id_idx")
+  @@index([isDeleted], map: "monastery_space_is_deleted_idx")
   @@map("Monastery_Space")
 }
 
@@ -106,12 +112,14 @@ model MonasteryMember {
   id               Int            @id @default(autoincrement())
   userId           Int            @map("user_id")
   monasterySpaceId Int            @map("monastery_space_id")
-  role             Int
+  role             Int            @default(7)
   isOwner          Boolean        @default(false) @map("is_owner")
   
   user             User           @relation(fields: [userId], references: [id])
   monasterySpace   MonasterySpace @relation(fields: [monasterySpaceId], references: [id])
   
+  @@unique([userId, monasterySpaceId], map: "monastery_member_user_id_monastery_space_id_unique")
+  @@index([monasterySpaceId], map: "monastery_member_monastery_space_id_idx")
   @@map("Monastery_Member")
 }
 
@@ -140,6 +148,10 @@ model DonorList {
   donor               User           @relation("DonorUser", fields: [donorId], references: [id])
   reviewer            User?          @relation("ReviewerUser", fields: [reviewerId], references: [id])
   
+  @@index([monasterySpaceId], map: "donor_list_monastery_space_id_idx")
+  @@index([donorId], map: "donor_list_donor_id_idx")
+  @@index([reviewerId], map: "donor_list_reviewer_id_idx")
+  @@index([statusValue, createdAt], map: "donor_list_status_created_at_idx")
   @@map("Donor_List")
 }
 
@@ -154,6 +166,7 @@ model Notification {
   
   user        User     @relation(fields: [userId], references: [id])
   
+  @@index([userId, createdAt], map: "notification_user_id_created_at_idx")
   @@map("Notification")
 }
 
@@ -185,6 +198,9 @@ model Invitation {
   invitedUser      User           @relation("InvitedUser", fields: [invitedUserId], references: [id])
   invitedBy        User           @relation("InvitedByUser", fields: [invitedById], references: [id])
   
+  @@index([monasterySpaceId], map: "invitation_monastery_space_id_idx")
+  @@index([invitedUserId], map: "invitation_invited_user_id_idx")
+  @@index([invitedById], map: "invitation_invited_by_id_idx")
   @@map("Invitation")
 }
 

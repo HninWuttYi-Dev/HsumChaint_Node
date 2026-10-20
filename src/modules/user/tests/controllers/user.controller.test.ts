@@ -133,9 +133,11 @@ describe('UserController Unit Test (Mocking)', () => {
     expect(response.status).toBe(200);
     expect(Array.isArray(response.body.data.users)).toBe(true);
     expect(response.body.data.paginationData).toBeDefined();
-    expect(findManyMock).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ roleId: 2 }),
-    }));
+    expect(findManyMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ roleId: 2 }),
+      })
+    );
   });
 
   // Zod validation: bad input is rejected by validation middleware BEFORE

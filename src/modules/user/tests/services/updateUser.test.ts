@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 // 1. Import types from Prisma Client
-import { type MonkProfile, type User } from 'prisma-client';
+import type { MonkProfile, User } from 'prisma-client';
 import { prisma } from '@/lib/prisma';
 import { updateUserService } from '../../user.service';
 
@@ -184,9 +184,7 @@ describe('updateUserService Unit Test (Mocking)', () => {
   it('should throw an error when trying to update with invalid user ID', async () => {
     findUniqueMock.mockResolvedValue(null);
 
-    await expect(updateUserService(999, { name: 'ghost' })).rejects.toThrow(
-      'User is not found'
-    );
+    await expect(updateUserService(999, { name: 'ghost' })).rejects.toThrow('User is not found');
 
     expect(updateMock).not.toHaveBeenCalled();
   });
