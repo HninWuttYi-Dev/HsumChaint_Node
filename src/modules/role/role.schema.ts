@@ -24,15 +24,18 @@ export type RoleIdParamInput = z.infer<typeof roleIdParamSchema>['params'];
 export const createRoleSchema = z.object({
   body: z.object({
     roleName: z
-      .string({ required_error: 'Role name is required' })
+      .string('Role name is required')
       .trim()
       .min(1, 'Role name cannot be empty')
       .max(50, 'Role name must not exceed 50 characters'),
-    permissionIds: z.array(z.number().int().positive()).default([]),
+    permissionIds: z.array(z.number().int().positive()).optional().default([]),
   }),
 });
 
-export type CreateRoleInput = z.infer<typeof createRoleSchema>['body'];
+export type CreateRoleInput = {
+  roleName: string;
+  permissionIds?: number[];
+};
 
 // Update role
 export const updateRoleSchema = z.object({
@@ -55,10 +58,8 @@ export type UpdateRoleInput = z.infer<typeof updateRoleSchema>['body'];
 // Assign permissions
 export const assignPermissionsSchema = z.object({
   body: z.object({
-    roleId: z.number({ required_error: 'roleId is required' }).int().positive(),
-    permissionIds: z.array(z.number().int().positive(), {
-      required_error: 'permissionIds array is required',
-    }),
+    roleId: z.number('roleId is required').int().positive(),
+    permissionIds: z.array(z.number().int().positive(), 'permissionIds array is required'),
   }),
 });
 

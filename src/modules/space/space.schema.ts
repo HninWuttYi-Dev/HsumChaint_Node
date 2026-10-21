@@ -4,7 +4,7 @@ import { PaginationQuerySchema } from '@/helper/paginationSchema';
 export const createSpaceSchema = z.object({
   body: z.object({
     monasteryName: z
-      .string({ required_error: 'Monastery name is required.' })
+      .string('Monastery name is required.')
       .trim()
       .min(1, 'Monastery name is required.')
       .max(255),
@@ -44,15 +44,13 @@ export const inviteMemberSchema = z.object({
     .object({
       roleId: z.coerce.number().int().positive('Valid roleId is required'),
       userId: z.coerce.number().int().positive().optional(),
+      phone: z.string().trim().optional(),
       phoneNumber: z.string().trim().optional(),
     })
-    .refine(
-      (data) => data.userId !== undefined || (data.phoneNumber && data.phoneNumber.length > 0),
-      {
-        message: 'Either userId or phoneNumber must be provided',
-        path: ['userId'],
-      }
-    ),
+    .refine((data) => data.userId !== undefined || !!data.phone || !!data.phoneNumber, {
+      message: 'Either userId, phone, or phoneNumber must be provided',
+      path: ['phone'],
+    }),
 });
 
 export const respondInvitationSchema = z.object({
@@ -60,11 +58,19 @@ export const respondInvitationSchema = z.object({
     invitationId: z.coerce.number().int().positive('Invalid invitation ID'),
   }),
   body: z.object({
-    status: z.coerce
-      .number()
-      .int()
-      .refine((val) => val === 1 || val === 2, {
-        message: 'Invitation response must be Accept or Reject.',
+    status: z
+      .union([z.boolean(), z.number(), z.enum(['accept', 'reject', 'Accept', 'Reject'])])
+      .transform((val): 1 | 2 | 0 => {
+        // 1 / true / 'accept' -> 1 (Accept)
+        if (val === 1 || val === true || val === 'accept' || val === 'Accept') {
+          return 1;
+        }
+        // 0 / false -> 0 (Reject)
+        if (val === 0 || val === false) {
+          return 0;
+        }
+        // 2 / 'reject' -> 2 (Reject)
+        return 2;
       }),
   }),
 });
