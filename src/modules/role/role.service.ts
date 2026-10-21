@@ -382,7 +382,7 @@ export const getPermissionsService = async (query: GetPermissionsQueryInput) => 
 
   const whereClause: {
     isDeleted: boolean;
-    name?: { contains: string; startsWith?: string };
+    name?: { contains?: string; startsWith?: string };
   } = {
     isDeleted: false,
   };

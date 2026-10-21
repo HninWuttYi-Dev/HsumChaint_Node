@@ -359,13 +359,25 @@ export const inviteMemberService = async (
   }
 
   let invitedUser = null;
+  const targetPhone = (request.phone ?? request.phoneNumber)?.trim();
+  const normalizedPhone = targetPhone
+    ? targetPhone.startsWith('+959')
+      ? `09${targetPhone.slice(4)}`
+      : targetPhone.startsWith('959')
+        ? `09${targetPhone.slice(3)}`
+        : targetPhone
+    : undefined;
+
   if (request.userId) {
     invitedUser = await prisma.user.findFirst({
       where: { id: request.userId, isDeleted: false },
     });
-  } else if (request.phoneNumber) {
+  } else if (normalizedPhone) {
     invitedUser = await prisma.user.findFirst({
-      where: { phone: request.phoneNumber.trim(), isDeleted: false },
+      where: {
+        OR: [{ phone: normalizedPhone }, { phone: targetPhone }],
+        isDeleted: false,
+      },
     });
   }
 
@@ -435,9 +447,12 @@ export const respondToInvitationService = async (
   invitationId: number,
   request: RespondInvitationInput
 ): Promise<InvitationResponseDto> => {
-  if (request.status !== 1 && request.status !== 2) {
+  const isAccept = request.status === 1;
+  const isReject = request.status === 0 || request.status === 2;
+  if (!isAccept && !isReject) {
     throw new AppError('Invitation response must be Accept or Reject.', 400);
   }
+  const resolvedStatus = isAccept ? 1 : 2;
 
   const invitation = await prisma.invitation.findUnique({
     where: { id: invitationId },
@@ -458,7 +473,7 @@ export const respondToInvitationService = async (
     where: { id: invitation.role, isDeleted: false },
   });
 
-  if (request.status === 1) {
+  if (resolvedStatus === 1) {
     // Accept
     if (!role) {
       throw new AppError('Invitation role is inactive or not found.', 400);
@@ -479,7 +494,7 @@ export const respondToInvitationService = async (
 
   const updated = await prisma.invitation.update({
     where: { id: invitationId },
-    data: { status: request.status },
+    data: { status: resolvedStatus },
   });
 
   return {
@@ -492,7 +507,7 @@ export const respondToInvitationService = async (
     status: updated.status,
     createdAt: updated.createdAt,
     message:
-      request.status === 1
+      resolvedStatus === 1
         ? 'Invitation accepted successfully.'
         : 'Invitation rejected successfully.',
   };
