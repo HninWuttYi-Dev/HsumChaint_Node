@@ -156,3 +156,43 @@ export const requireAnyPermission = (...requiredPermissions: string[]) => {
     }
   };
 };
+
+/**
+ * Express middleware to check if the authenticated user is operating on their own resource
+ * (e.g. req.params.id matches req.user.userId), OR has an admin override permission.
+ *
+ * @param adminPermission Fallback permission required if not the resource owner (e.g., 'User.Update')
+ */
+export const checkSelfOrPermission = (adminPermission: string) => {
+  return async (req: Request, _res: Response, next: NextFunction) => {
+    try {
+      const user = req.user;
+      if (!user?.userId || !user.roleId) {
+        return next(new AppError('Unauthorized: Missing user authentication', 401));
+      }
+
+      const targetId = Number(req.params.id);
+      // 1. If operating on own resource, allow directly
+      if (user.userId === targetId) {
+        return next();
+      }
+
+      // 2. SuperAdmin bypass
+      if (user.roleId === 3) {
+        return next();
+      }
+
+      // 3. Admin permission check
+      const permissions = await getRolePermissions(user.roleId);
+      if (!permissions.includes(adminPermission)) {
+        return next(
+          new AppError('Forbidden: You do not have permission to perform this action', 403)
+        );
+      }
+
+      return next();
+    } catch (error) {
+      return next(error);
+    }
+  };
+};

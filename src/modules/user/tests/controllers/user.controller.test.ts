@@ -174,6 +174,18 @@ describe('UserController Unit Test (Mocking)', () => {
     expect(response.body.data.name).toBe('updated_api_user');
   });
 
+  it('PUT /api/v1/users/:id - should return 403 when updating another user profile without permission', async () => {
+    const OTHER_USER_ID = 888;
+    const response = await request(app)
+      .put(`/api/v1/users/${OTHER_USER_ID}`)
+      .set('Authorization', accessToken)
+      .send({ name: 'malicious_update', contactPhone: '09888888888' });
+
+    expect(response.status).toBe(403);
+    expect(response.body.message).toContain('Forbidden');
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
   // Soft delete: service sets isDeleted:true, controller returns success message.
   // DB state verification is covered by softDeleteUserService unit test.
   it('DELETE /api/v1/users/:id - should soft delete user', async () => {
@@ -189,5 +201,16 @@ describe('UserController Unit Test (Mocking)', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.message).toContain('deleted successfully');
+  });
+
+  it('DELETE /api/v1/users/:id - should return 403 when deleting another user without permission', async () => {
+    const OTHER_USER_ID = 888;
+    const response = await request(app)
+      .delete(`/api/v1/users/${OTHER_USER_ID}`)
+      .set('Authorization', accessToken);
+
+    expect(response.status).toBe(403);
+    expect(response.body.message).toContain('Forbidden');
+    expect(updateMock).not.toHaveBeenCalled();
   });
 });
