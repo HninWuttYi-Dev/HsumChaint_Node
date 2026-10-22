@@ -1,5 +1,6 @@
 import { app } from './app';
 import { env } from './config/env';
+import { startDonationReminders } from './jobs/donation-reminder.job';
 import { prisma } from './lib/prisma';
 import { redis } from './lib/redis';
 import { logger } from './utils/logger';
@@ -11,6 +12,7 @@ async function bootstrap() {
     // Check Database connection
     await prisma.$connect();
     logger.info('📡 Database connected successfully');
+    const stopReminders = startDonationReminders();
 
     const server = app.listen(PORT, () => {
       logger.info(`🚀 Server is running on port ${PORT}`);
@@ -19,6 +21,7 @@ async function bootstrap() {
     // Graceful shutdown
     const shutdown = async (signal: string) => {
       logger.info(`${signal} received, shutting down...`);
+      stopReminders();
 
       server.close(async () => {
         await prisma.$disconnect();
