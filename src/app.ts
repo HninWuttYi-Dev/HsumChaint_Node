@@ -9,11 +9,13 @@ import { swaggerSpec } from './config/swagger';
 import { globalErrorHandler } from './middlewares/errorHandler';
 import { httpLogger } from './middlewares/httpLogger';
 import authRoutes from './modules/auth/auth.routes';
+import { donationCalendarRouter } from './modules/donation-calendar/calendar.routes';
 import { donorRouter } from './modules/donor/donor.routes';
 import healthRoutes from './modules/health/health.routes';
 import roleRouter from './modules/role/role.routes';
 import { spaceRouter } from './modules/space/space.routes';
 import { userRouter } from './modules/user/user.routes';
+import { userSettingRouter } from './modules/user-setting/user-setting.routes';
 import { errorResponse, successResponse } from './utils/response';
 
 const app = express();
@@ -47,6 +49,8 @@ app.use('/api/v1/roles', roleRouter);
 app.use('/api/v1/role-permissions', roleRouter);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/donors', donorRouter);
+app.use('/api/v1/user-settings', userSettingRouter);
+app.use('/api/v1/donations', donationCalendarRouter);
 
 // Health check
 app.get('/health', (_, res) => {
