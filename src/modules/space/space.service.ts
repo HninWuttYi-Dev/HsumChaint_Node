@@ -22,8 +22,8 @@ export interface MonasterySpaceDto {
 export interface MonasteryMemberDto {
   id: number;
   userId: number;
-  userName: string | null;
-  phoneNumber: string | null;
+  name: string | null;
+  phone: string | null;
   monasterySpaceId: number;
   roleId: number;
   roleName: string | null;
@@ -552,8 +552,8 @@ export const getMembersService = async (
   const items: MonasteryMemberDto[] = memberships.map((m) => ({
     id: m.id,
     userId: m.user.id,
-    userName: m.user.name,
-    phoneNumber: m.user.phone,
+    name: m.user.name,
+    phone: m.user.phone,
     monasterySpaceId: m.monasterySpaceId,
     roleId: m.role,
     roleName: roleMap.get(m.role) ?? null,
@@ -602,8 +602,8 @@ export const updateMemberRoleService = async (
   return {
     id: updated.id,
     userId: updated.user.id,
-    userName: updated.user.name,
-    phoneNumber: updated.user.phone,
+    name: updated.user.name,
+    phone: updated.user.phone,
     monasterySpaceId: updated.monasterySpaceId,
     roleId: updated.role,
     roleName: role.name,
@@ -644,8 +644,8 @@ export const removeMemberService = async (
   return {
     id: member.id,
     userId: member.userId,
-    userName: user?.name ?? null,
-    phoneNumber: user?.phone ?? null,
+    name: user?.name ?? null,
+    phone: user?.phone ?? null,
     monasterySpaceId: member.monasterySpaceId,
     roleId: member.role,
     roleName: role?.name ?? null,

@@ -114,8 +114,8 @@ export const getSpaceMembers = async (req: Request, res: Response, next: NextFun
 export const updateMemberRole = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const spaceId = Number(req.params.id);
-    const memberUserId = Number(req.params.memberUserId ?? req.params.userId);
-    const updated = await updateMemberRoleService(req.user.userId, spaceId, memberUserId, req.body);
+    const userId = Number(req.params.userId);
+    const updated = await updateMemberRoleService(req.user.userId, spaceId, userId, req.body);
     return successResponse(res, updated, 'Member role updated successfully.');
   } catch (err) {
     next(err);
@@ -125,8 +125,8 @@ export const updateMemberRole = async (req: Request, res: Response, next: NextFu
 export const removeSpaceMember = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const spaceId = Number(req.params.id);
-    const memberUserId = Number(req.params.memberUserId ?? req.params.userId);
-    const result = await removeMemberService(req.user.userId, spaceId, memberUserId);
+    const userId = Number(req.params.userId);
+    const result = await removeMemberService(req.user.userId, spaceId, userId);
     return successResponse(res, result, 'Member removed successfully.');
   } catch (err) {
     next(err);

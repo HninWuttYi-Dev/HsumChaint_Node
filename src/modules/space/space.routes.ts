@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '@/middlewares/authMiddleWare';
+import { checkPermission } from '@/middlewares/permissionMiddleware';
 import { validator } from '@/middlewares/validator';
 import {
   createSpace,
@@ -30,7 +31,12 @@ export const spaceRouter = Router();
 spaceRouter.use(authMiddleware);
 
 // 1. Space / Monastery CRUD
-spaceRouter.post('/', validator(createSpaceSchema), createSpace);
+spaceRouter.post(
+  '/',
+  checkPermission('Monastery.Create'),
+  validator(createSpaceSchema),
+  createSpace
+);
 spaceRouter.get('/', validator(spacePaginationSchema), getSpaces);
 spaceRouter.get('/:id', validator(spaceIdParamSchema), getSpaceById);
 spaceRouter.put('/:id', validator(updateSpaceSchema), updateSpace);
@@ -46,13 +52,7 @@ spaceRouter.post(
 
 // 3. Member Management
 spaceRouter.get('/:id/members', validator(spaceIdParamSchema), getSpaceMembers);
-spaceRouter.put(
-  '/:id/members/:memberUserId/role',
-  validator(updateMemberRoleSchema),
-  updateMemberRole
-);
 spaceRouter.put('/:id/members/:userId', validator(updateMemberRoleSchema), updateMemberRole);
-spaceRouter.delete('/:id/members/:memberUserId', validator(removeMemberSchema), removeSpaceMember);
 spaceRouter.delete('/:id/members/:userId', validator(removeMemberSchema), removeSpaceMember);
 
 export default spaceRouter;
