@@ -78,7 +78,7 @@ export const respondInvitationSchema = z.object({
 export const updateMemberRoleSchema = z.object({
   params: z.object({
     id: z.coerce.number().int().positive('Invalid space ID'),
-    memberUserId: z.coerce.number().int().positive('Invalid member user ID'),
+    userId: z.coerce.number().int().positive('Invalid user ID'),
   }),
   body: z.object({
     roleId: z.coerce.number().int().positive('Valid roleId is required'),
@@ -88,7 +88,7 @@ export const updateMemberRoleSchema = z.object({
 export const removeMemberSchema = z.object({
   params: z.object({
     id: z.coerce.number().int().positive('Invalid space ID'),
-    memberUserId: z.coerce.number().int().positive('Invalid member user ID'),
+    userId: z.coerce.number().int().positive('Invalid user ID'),
   }),
 });
 

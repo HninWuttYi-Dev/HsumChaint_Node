@@ -560,7 +560,7 @@ describe('Monastery Service Unit Tests (matching C# HsumChaint)', () => {
       const result = await getMembersService(1, space.id, { page: 1, limit: 10 });
 
       expect(result.items.length).toBe(1);
-      expect(result.items[0].userName).toBe('Sayadaw U Thila');
+      expect(result.items[0].name).toBe('Sayadaw U Thila');
       expect(result.items[0].isOwner).toBe(true);
     });
 
