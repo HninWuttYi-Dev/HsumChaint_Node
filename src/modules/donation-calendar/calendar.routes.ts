@@ -58,7 +58,7 @@ donationCalendarRouter.get(
         const items = groups.get(date) ?? [];
         items.push({
           id: row.id,
-          donorName: row.donorName ?? row.donor.name,
+          donorName: row.donorName ?? row.donor?.name ?? null,
           donationType: row.donationType,
           status: row.status,
           pickupTime: row.pickupTime,

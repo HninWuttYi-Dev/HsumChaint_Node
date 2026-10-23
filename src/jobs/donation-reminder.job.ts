@@ -108,7 +108,7 @@ export async function runReminders(now = new Date()) {
       (dateStart(date).getTime() - dateStart(localDate(now)).getTime()) / DAY
     );
     const recipients = new Set([
-      row.donorId,
+      ...(row.donorId === null ? [] : [row.donorId]),
       ...row.monasterySpace.members.map((member) => member.userId),
     ]);
     for (const userId of recipients) {

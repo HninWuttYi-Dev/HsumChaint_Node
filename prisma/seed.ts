@@ -1,5 +1,6 @@
 import { prisma } from "../src/lib/prisma";
 import { logger } from "../src/utils/logger";
+import { DONATION_PERMISSIONS } from "../src/modules/space/donation.schema";
 
 export const SYSTEM_ROLES = [
   { id: 1, name: "Monk" },
@@ -17,6 +18,7 @@ export const SPACE_ROLES = [
 export const ALL_ROLES = [...SYSTEM_ROLES, ...SPACE_ROLES];
 
 export const SYSTEM_PERMISSIONS = [
+  ...DONATION_PERMISSIONS,
   // User Management
   "User.View",
   "User.Create",
@@ -122,14 +124,16 @@ async function seedRbac() {
     "Monastery.Update",
     "Monastery.Delete",
     "Monastery.ManageMembers",
+    ...DONATION_PERMISSIONS,
   ]);
 
   // Donor (2): Read-only view
-  await assignPermissions(2, ["User.View", "Donor.View", "Monastery.View"]);
+  await assignPermissions(2, ["User.View", "Donor.View", "Monastery.View", "Donation.View", "Donation.Create", "Donation.Cancel"]);
 
   // 5. Assign Space Role Permissions
   // Space Admin (4): Full space management
   await assignPermissions(4, [
+    ...DONATION_PERMISSIONS,
     "Space.View",
     "Space.Settings.Edit",
     "Space.Member.Invite",
@@ -143,6 +147,7 @@ async function seedRbac() {
 
   // Space Moderator (5)
   await assignPermissions(5, [
+    ...DONATION_PERMISSIONS,
     "Space.View",
     "Space.Member.Invite",
     "Space.Post.Create",
@@ -152,13 +157,14 @@ async function seedRbac() {
 
   // Space Editor (6)
   await assignPermissions(6, [
+    "Donation.View", "Donation.Create", "Donation.Schedule", "Donation.Cancel",
     "Space.View",
     "Space.Post.Create",
     "Space.Donation.Create",
   ]);
 
   // Space Member (7)
-  await assignPermissions(7, ["Space.View"]);
+  await assignPermissions(7, ["Space.View", "Donation.View", "Donation.Create", "Donation.Cancel"]);
 
   logger.info("RBAC seeding complete: 3 System Roles, 4 Space Roles, and permissions assigned.");
 }

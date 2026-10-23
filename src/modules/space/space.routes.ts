@@ -1,10 +1,9 @@
 import { Router } from 'express';
-import { prisma } from '@/lib/prisma';
 import { authMiddleware } from '@/middlewares/authMiddleWare';
 import { checkPermission } from '@/middlewares/permissionMiddleware';
 import { validator } from '@/middlewares/validator';
 import { createSpaceDonationRouter } from './donation.routes';
-import { createDonationService } from './donation.service';
+import { donationService } from './donation.runtime';
 import {
   createSpace,
   deleteSpace,
@@ -32,7 +31,7 @@ export const spaceRouter = Router();
 
 // All space/monastery endpoints require authentication
 spaceRouter.use(authMiddleware);
-spaceRouter.use('/:spaceId/donations', createSpaceDonationRouter(createDonationService(prisma)));
+spaceRouter.use('/:spaceId/donations', createSpaceDonationRouter(donationService));
 
 // 1. Space / Monastery CRUD
 spaceRouter.post(
