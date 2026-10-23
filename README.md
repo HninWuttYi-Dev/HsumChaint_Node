@@ -211,6 +211,12 @@ docker-compose -f docker-compose-development.yml --env-file .env down -v
 | `POST` | `/api/v1/users` | Create a user | ❌ |
 | `DELETE` | `/api/v1/users/:id` | Delete a user | ❌ |
 
+### Space donations
+
+Submit, list, review and complete donations under
+`/api/v1/spaces/:spaceId/donations`. See [the donation API guide](src/modules/space/DONATIONS.md)
+for permissions, request examples, status transitions and tests.
+
 ### Monitoring
 
 | Method | Endpoint | Description |
