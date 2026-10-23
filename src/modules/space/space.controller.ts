@@ -29,7 +29,11 @@ export const getSpaces = async (req: Request, res: Response, next: NextFunction)
     const limit = Number(req.query.limit) || 10;
     const search = req.query.search as string | undefined;
 
-    const result = await getMyMonasteriesService(req.user.userId, { page, limit, search });
+    const result = await getMyMonasteriesService(
+      req.user.userId,
+      { page, limit, search },
+      req.user.roleId
+    );
     const paginationData = generatePaginationData(req, result.total, page, limit);
 
     return successResponse(
@@ -45,7 +49,7 @@ export const getSpaces = async (req: Request, res: Response, next: NextFunction)
 export const getSpaceById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const spaceId = Number(req.params.id);
-    const space = await getMonasteryService(req.user.userId, spaceId);
+    const space = await getMonasteryService(req.user.userId, spaceId, req.user.roleId);
     return successResponse(res, space, 'Monastery retrieved successfully.');
   } catch (err) {
     next(err);
@@ -55,7 +59,12 @@ export const getSpaceById = async (req: Request, res: Response, next: NextFuncti
 export const updateSpace = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const spaceId = Number(req.params.id);
-    const updated = await updateMonasteryService(req.user.userId, spaceId, req.body);
+    const updated = await updateMonasteryService(
+      req.user.userId,
+      spaceId,
+      req.body,
+      req.user.roleId
+    );
     return successResponse(res, updated, 'Monastery updated successfully.');
   } catch (err) {
     next(err);
@@ -65,7 +74,7 @@ export const updateSpace = async (req: Request, res: Response, next: NextFunctio
 export const deleteSpace = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const spaceId = Number(req.params.id);
-    const result = await deleteMonasteryService(req.user.userId, spaceId);
+    const result = await deleteMonasteryService(req.user.userId, spaceId, req.user.roleId);
     return successResponse(res, result, 'Monastery deleted successfully.');
   } catch (err) {
     next(err);
@@ -98,7 +107,12 @@ export const getSpaceMembers = async (req: Request, res: Response, next: NextFun
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 10;
 
-    const result = await getMembersService(req.user.userId, spaceId, { page, limit });
+    const result = await getMembersService(
+      req.user.userId,
+      spaceId,
+      { page, limit },
+      req.user.roleId
+    );
     const paginationData = generatePaginationData(req, result.total, page, limit);
 
     return successResponse(

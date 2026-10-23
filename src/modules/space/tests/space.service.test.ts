@@ -384,6 +384,7 @@ describe('Monastery Service Unit Tests (matching C# HsumChaint)', () => {
       { id: 1, name: 'Sayadaw U Thila', phone: '09111111111', roleId: 1, isDeleted: false },
       { id: 2, name: 'Donor Ko Min', phone: '09222222222', roleId: 2, isDeleted: false },
       { id: 3, name: 'U Zaw', phone: '09333333333', roleId: 2, isDeleted: false },
+      { id: 4, name: 'Admin User', phone: '09444444444', roleId: 3, isDeleted: false },
     ];
 
     mockSpaces = [];
@@ -465,11 +466,30 @@ describe('Monastery Service Unit Tests (matching C# HsumChaint)', () => {
       );
     });
 
+    it('should allow System Admin to view any monastery without being a member', async () => {
+      const space = await createMonasteryService(1, { monasteryName: 'Monastery A' });
+      const retrieved = await getMonasteryService(4, space.id, 3);
+
+      expect(retrieved.id).toBe(space.id);
+      expect(retrieved.monasteryName).toBe('Monastery A');
+      expect(retrieved.currentUserRoleName).toBe('Admin');
+      expect(retrieved.isOwner).toBe(false);
+    });
+
     it('should retrieve list of monasteries the user is member of', async () => {
       await createMonasteryService(1, { monasteryName: 'Monastery 1' });
       await createMonasteryService(1, { monasteryName: 'Monastery 2' });
 
       const result = await getMyMonasteriesService(1, { page: 1, limit: 10 });
+      expect(result.items.length).toBe(2);
+      expect(result.total).toBe(2);
+    });
+
+    it('should allow System Admin to list all monasteries even if not a member of them', async () => {
+      await createMonasteryService(1, { monasteryName: 'Monastery 1' });
+      await createMonasteryService(1, { monasteryName: 'Monastery 2' });
+
+      const result = await getMyMonasteriesService(4, { page: 1, limit: 10 }, 3);
       expect(result.items.length).toBe(2);
       expect(result.total).toBe(2);
     });
@@ -562,6 +582,14 @@ describe('Monastery Service Unit Tests (matching C# HsumChaint)', () => {
       expect(result.items.length).toBe(1);
       expect(result.items[0].name).toBe('Sayadaw U Thila');
       expect(result.items[0].isOwner).toBe(true);
+    });
+
+    it('should allow System Admin to view members of any space without being a member', async () => {
+      const space = await createMonasteryService(1, { monasteryName: 'Monastery Members' });
+      const result = await getMembersService(4, space.id, { page: 1, limit: 10 }, 3);
+
+      expect(result.items.length).toBe(1);
+      expect(result.items[0].name).toBe('Sayadaw U Thila');
     });
 
     it('should update member role (except owner)', async () => {
