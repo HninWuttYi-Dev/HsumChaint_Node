@@ -32,14 +32,58 @@ model RolePermission {
   id            Int         @id @default(autoincrement())
   roleId        Int         @map("role_id")
   permissionId  Int         @map("permission_id")
+  isDeleted     Boolean     @default(false) @map("is_deleted")
   
   role          Role        @relation(fields: [roleId], references: [id], onDelete: Cascade)
   permission    Permission  @relation(fields: [permissionId], references: [id], onDelete: Cascade)
   
-  @@unique([roleId, permissionId], map: "role_permission_role_id_permission_id_unique")
-  @@index([roleId], map: "role_permission_role_id_idx")
-  @@index([permissionId], map: "role_permission_permission_id_idx")
+  @@unique([roleId, permissionId], map: "UX_Role_Permission_role_permission")
+  @@index([roleId], map: "IX_Role_Permission_role_id")
+  @@index([permissionId], map: "IX_Role_Permission_permission_id")
   @@map("Role_Permission")
+}
+
+model SpaceRole {
+  id          Int                    @id @default(autoincrement())
+  name        String                 @unique(map: "space_role_name_unique") @db.VarChar(50)
+  description String?                @db.VarChar(255)
+  isDeleted   Boolean                @default(false) @map("is_deleted")
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @default(now()) @updatedAt @map("updated_at")
+
+  members     MonasteryMember[]
+  invitations Invitation[]
+  permissions SpaceRolePermission[]
+
+  @@map("Space_Role")
+}
+
+model SpacePermission {
+  id          Int                    @id @default(autoincrement())
+  name        String                 @unique(map: "space_permission_name_unique") @db.VarChar(100)
+  description String?                @db.VarChar(255)
+  isDeleted   Boolean                @default(false) @map("is_deleted")
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @default(now()) @updatedAt @map("updated_at")
+
+  spaceRoles  SpaceRolePermission[]
+
+  @@map("Space_Permission")
+}
+
+model SpaceRolePermission {
+  id                Int             @id @default(autoincrement())
+  spaceRoleId       Int             @map("space_role_id")
+  spacePermissionId Int             @map("space_permission_id")
+  isDeleted         Boolean         @default(false) @map("is_deleted")
+
+  spaceRole         SpaceRole       @relation(fields: [spaceRoleId], references: [id], onDelete: Cascade)
+  spacePermission   SpacePermission @relation(fields: [spacePermissionId], references: [id], onDelete: Cascade)
+
+  @@unique([spaceRoleId, spacePermissionId], map: "UX_Space_Role_Permission")
+  @@index([spaceRoleId], map: "IX_Space_Role_Permission_role_id")
+  @@index([spacePermissionId], map: "IX_Space_Role_Permission_permission_id")
+  @@map("Space_Role_Permission")
 }
 
 model User {
@@ -56,7 +100,7 @@ model User {
   updatedAt     DateTime  @updatedAt @map("updated_at")
   isDeleted     Boolean   @default(false) @map("is_deleted")
   
-  role          Role      @relation(fields: [roleId], references: [id])
+  role          Role      @relation(fields: [roleId], references: [id], onDelete: Restrict)
   
   monkProfile         MonkProfile?
   monasterySpaces     MonasterySpace[]  @relation("SpaceCreator")
@@ -94,16 +138,16 @@ model MonasterySpace {
   monasteryName   String   @map("monastery_name") @db.VarChar(255)
   description     String?  @db.VarChar(1000)
   address         String?  @db.VarChar(500)
-  createdById     Int      @map("created_by_id")
+  createdById     Int?     @map("created_by_id")
   isDeleted       Boolean  @default(false) @map("is_deleted")
   
-  createdBy       User     @relation("SpaceCreator", fields: [createdById], references: [id])
+  createdBy       User?    @relation("SpaceCreator", fields: [createdById], references: [id], onDelete: SetNull)
   
   members         MonasteryMember[]
   donorLists      DonorList[]
   invitations     Invitation[]
   
-  @@index([createdById], map: "monastery_space_created_by_id_idx")
+  @@index([createdById], map: "IX_Monastery_Space_created_by_id")
   @@index([isDeleted], map: "monastery_space_is_deleted_idx")
   @@map("Monastery_Space")
 }
@@ -112,30 +156,32 @@ model MonasteryMember {
   id               Int            @id @default(autoincrement())
   userId           Int            @map("user_id")
   monasterySpaceId Int            @map("monastery_space_id")
-  role             Int            @default(7)
+  spaceRoleId      Int            @map("space_role_id")
   isOwner          Boolean        @default(false) @map("is_owner")
   
-  user             User           @relation(fields: [userId], references: [id])
-  monasterySpace   MonasterySpace @relation(fields: [monasterySpaceId], references: [id])
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monasterySpace   MonasterySpace @relation(fields: [monasterySpaceId], references: [id], onDelete: Cascade)
+  spaceRole        SpaceRole      @relation(fields: [spaceRoleId], references: [id], onDelete: Restrict)
   
-  @@unique([userId, monasterySpaceId], map: "monastery_member_user_id_monastery_space_id_unique")
-  @@index([monasterySpaceId], map: "monastery_member_monastery_space_id_idx")
+  @@unique([userId, monasterySpaceId], map: "UX_Monastery_Member_user_space")
+  @@index([monasterySpaceId], map: "IX_Monastery_Member_monastery_space_id")
+  @@index([spaceRoleId], map: "IX_Monastery_Member_space_role_id")
   @@map("Monastery_Member")
 }
 
 model DonorList {
   id                  Int       @id @default(autoincrement())
   monasterySpaceId    Int       @map("monastery_space_id")
-  donorId             Int       @map("donor_id")
+  donorId             Int?      @map("donor_id")
   donorName           String?   @map("donor_name") @db.VarChar(255)
   donationType        String?   @map("donation_type") @db.VarChar(100)
-  donationTypeValue   Int       @map("donation_type_value")
+  donationTypeValue   Int       @default(0) @map("donation_type_value")
   customDonationType  String?   @map("custom_donation_type") @db.VarChar(255)
   note                String?   @db.VarChar(1000)
   amount              Decimal?  @db.Decimal(18, 2)
   quantity            Decimal?  @db.Decimal(18, 2)
   status              String?   @db.VarChar(100)
-  statusValue         Int       @map("status_value")
+  statusValue         Int       @default(2) @map("status_value")
   reviewerId          Int?      @map("reviewer_id")
   
   createdAt           DateTime  @default(now()) @map("created_at")
@@ -144,29 +190,29 @@ model DonorList {
   dropoffTime         DateTime? @map("dropoff_time")
   completedAt         DateTime? @map("completed_at")
   
-  monasterySpace      MonasterySpace @relation(fields: [monasterySpaceId], references: [id])
-  donor               User           @relation("DonorUser", fields: [donorId], references: [id])
-  reviewer            User?          @relation("ReviewerUser", fields: [reviewerId], references: [id])
+  monasterySpace      MonasterySpace @relation(fields: [monasterySpaceId], references: [id], onDelete: Cascade)
+  donor               User?          @relation("DonorUser", fields: [donorId], references: [id], onDelete: SetNull)
+  reviewer            User?          @relation("ReviewerUser", fields: [reviewerId], references: [id], onDelete: SetNull)
   
-  @@index([monasterySpaceId], map: "donor_list_monastery_space_id_idx")
-  @@index([donorId], map: "donor_list_donor_id_idx")
-  @@index([reviewerId], map: "donor_list_reviewer_id_idx")
-  @@index([statusValue, createdAt], map: "donor_list_status_created_at_idx")
+  @@index([monasterySpaceId], map: "IX_Donor_List_monastery_space_id")
+  @@index([donorId], map: "IX_Donor_List_donor_id")
+  @@index([reviewerId], map: "IX_Donor_List_reviewer_id")
+  @@index([statusValue, createdAt], map: "IX_Donor_List_status_created_at")
   @@map("Donor_List")
 }
 
 model Notification {
   id          Int      @id @default(autoincrement())
   userId      Int      @map("user_id")
-  type        Int
+  type        Int      @default(2)
   message     String?  @db.VarChar(1000)
   isRead      Boolean  @default(false) @map("is_read")
   isDeleted   Boolean  @default(false) @map("is_deleted")
   createdAt   DateTime @default(now()) @map("created_at")
   
-  user        User     @relation(fields: [userId], references: [id])
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  @@index([userId, createdAt], map: "notification_user_id_created_at_idx")
+  @@index([userId, createdAt], map: "IX_Notification_user_id_created_at")
   @@map("Notification")
 }
 
@@ -186,21 +232,23 @@ model RefreshToken {
 }
 
 model Invitation {
-  id               Int      @id @default(autoincrement())
-  monasterySpaceId Int      @map("monastery_space_id")
-  invitedUserId    Int      @map("invited_user_id")
-  invitedById      Int      @map("invited_by_id")
-  role             Int
-  status           Int
-  createdAt        DateTime @default(now()) @map("created_at")
+  id               Int            @id @default(autoincrement())
+  monasterySpaceId Int            @map("monastery_space_id")
+  invitedUserId    Int            @map("invited_user_id")
+  invitedById      Int?           @map("invited_by_id")
+  spaceRoleId      Int            @default(4) @map("space_role_id")
+  status           Int            @default(0)
+  createdAt        DateTime       @default(now()) @map("created_at")
   
-  monasterySpace   MonasterySpace @relation(fields: [monasterySpaceId], references: [id])
-  invitedUser      User           @relation("InvitedUser", fields: [invitedUserId], references: [id])
-  invitedBy        User           @relation("InvitedByUser", fields: [invitedById], references: [id])
+  monasterySpace   MonasterySpace @relation(fields: [monasterySpaceId], references: [id], onDelete: Cascade)
+  invitedUser      User           @relation("InvitedUser", fields: [invitedUserId], references: [id], onDelete: Cascade)
+  invitedBy        User?          @relation("InvitedByUser", fields: [invitedById], references: [id], onDelete: SetNull)
+  spaceRole        SpaceRole      @relation(fields: [spaceRoleId], references: [id], onDelete: Restrict)
   
-  @@index([monasterySpaceId], map: "invitation_monastery_space_id_idx")
-  @@index([invitedUserId], map: "invitation_invited_user_id_idx")
-  @@index([invitedById], map: "invitation_invited_by_id_idx")
+  @@index([monasterySpaceId], map: "IX_Invitation_monastery_space_id")
+  @@index([invitedUserId], map: "IX_Invitation_invited_user_id")
+  @@index([invitedById], map: "IX_Invitation_invited_by_id")
+  @@index([spaceRoleId], map: "IX_Invitation_space_role_id")
   @@map("Invitation")
 }
 
