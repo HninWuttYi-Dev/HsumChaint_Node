@@ -26,7 +26,7 @@ describe.skipIf(!serverUrl)('existing-data schema upgrade', () => {
       await connection.query(`CREATE DATABASE \`${database}\``);
       await connection.query(`USE \`${database}\``);
       const names = (await readdir(migrations)).filter((name) => /^\d/.test(name)).sort();
-      for (const name of names.filter((name) => name !== '20261010161744_init_new_schema')) {
+      for (const name of names.filter((name) => name < '20261010161744_init_new_schema')) {
         await connection.query(await Bun.file(resolve(migrations, name, 'migration.sql')).text());
       }
 
@@ -71,6 +71,9 @@ describe.skipIf(!serverUrl)('existing-data schema upgrade', () => {
       await connection.query(
         await Bun.file(resolve(migrations, '20261010161744_init_new_schema/migration.sql')).text()
       );
+      for (const name of names.filter((name) => name > '20261010161744_init_new_schema')) {
+        await connection.query(await Bun.file(resolve(migrations, name, 'migration.sql')).text());
+      }
       for (const table of tables) {
         const previous = before.get(table);
         if (!previous) throw new Error(`Missing snapshot for ${table}`);
@@ -135,6 +138,17 @@ describe.skipIf(!serverUrl)('existing-data schema upgrade', () => {
         VALUES (?, 73, 1, 1)`,
         [space.id]
       );
+      // Manual donations preserve the name without requiring or fabricating a login account.
+      await connection.query(
+        `INSERT INTO Donor_List (monastery_space_id, donor_id, donor_name, donation_type_value, status, status_value)
+        VALUES (?, NULL, 'Offline Donor', 0, 'Accepted', 3)`,
+        [space.id]
+      );
+      const [offline] = await connection.query(
+        "SELECT donor_id, donor_name FROM Donor_List WHERE donor_name = 'Offline Donor'"
+      );
+      expect(offline.donor_id).toBeNull();
+      expect(offline.donor_name).toBe('Offline Donor');
 
       const drift = Bun.spawnSync(
         [

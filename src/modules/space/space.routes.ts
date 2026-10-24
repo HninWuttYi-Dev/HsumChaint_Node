@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { authMiddleware } from '@/middlewares/authMiddleWare';
 import { checkPermission } from '@/middlewares/permissionMiddleware';
 import { validator } from '@/middlewares/validator';
+import { createSpaceDonationRouter } from './donation.routes';
+import { donationService } from './donation.runtime';
 import {
   createSpace,
   deleteSpace,
@@ -29,6 +31,7 @@ export const spaceRouter = Router();
 
 // All space/monastery endpoints require authentication
 spaceRouter.use(authMiddleware);
+spaceRouter.use('/:spaceId/donations', createSpaceDonationRouter(donationService));
 
 // 1. Space / Monastery CRUD
 spaceRouter.post(

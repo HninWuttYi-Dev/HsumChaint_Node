@@ -126,7 +126,7 @@ model MonasteryMember {
 model DonorList {
   id                  Int       @id @default(autoincrement())
   monasterySpaceId    Int       @map("monastery_space_id")
-  donorId             Int       @map("donor_id")
+  donorId             Int?      @map("donor_id")
   donorName           String?   @map("donor_name") @db.VarChar(255)
   donationType        String?   @map("donation_type") @db.VarChar(100)
   donationTypeValue   Int       @map("donation_type_value")
@@ -145,7 +145,7 @@ model DonorList {
   completedAt         DateTime? @map("completed_at")
   
   monasterySpace      MonasterySpace @relation(fields: [monasterySpaceId], references: [id])
-  donor               User           @relation("DonorUser", fields: [donorId], references: [id])
+  donor               User?          @relation("DonorUser", fields: [donorId], references: [id], onDelete: Restrict)
   reviewer            User?          @relation("ReviewerUser", fields: [reviewerId], references: [id])
   
   @@index([monasterySpaceId], map: "donor_list_monastery_space_id_idx")
