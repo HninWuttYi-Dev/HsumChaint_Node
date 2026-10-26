@@ -25,6 +25,13 @@ export const SPACE_PERMISSIONS = [
   'Space.Post.Create',
   'Space.Donation.Create',
   'Space.Donation.Review',
+  'Space.Donation.Schedule',
+  'Donation.View',
+  'Donation.Create',
+  'Donation.Review',
+  'Donation.Schedule',
+  'Donation.Cancel',
+  'Donation.Delete',
 ] as const;
 
 export type SpacePermission = (typeof SPACE_PERMISSIONS)[number];

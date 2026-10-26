@@ -3,7 +3,14 @@ import pino from 'pino';
 
 const notifications: { userId: number; type: number; message: string; createdAt: Date }[] = [];
 const push = mock(async () => {});
-const donationQuery = mock(async (_query: unknown) => [
+const donationRows: {
+  id: number;
+  donorId: number | null;
+  pickupTime: Date;
+  dropoffTime: null;
+  createdAt: Date;
+  monasterySpace: { members: { userId: number }[] };
+}[] = [
   {
     id: 42,
     donorId: 8,
@@ -12,7 +19,8 @@ const donationQuery = mock(async (_query: unknown) => [
     createdAt: new Date('2026-10-01T00:00:00Z'),
     monasterySpace: { members: [{ userId: 9 }, { userId: 8 }] },
   },
-]);
+];
+const donationQuery = mock(async (_query: unknown) => donationRows);
 const tx = {
   user: { findFirst: async () => ({ fcmToken: 'test-token' }) },
   notification: {
@@ -78,4 +86,20 @@ test('routine due times, advance recipients, deduplication, and push failure per
   expect(notifications.filter((n) => n.type === 4)).toHaveLength(1);
   await runReminders(new Date('2026-10-22T10:01:00Z'));
   expect(notifications).toHaveLength(4);
+});
+
+test('offline donors receive no account reminder while monastery managers still do', async () => {
+  notifications.length = 0;
+  push.mockClear();
+  push.mockImplementation(async () => {});
+  const donation = donationRows[0];
+  if (!donation) throw new Error('Missing donation fixture');
+  donation.donorId = null;
+  donation.monasterySpace.members = [{ userId: 9 }];
+  await runReminders(new Date('2026-10-22T03:30:00Z'));
+  expect(notifications.map((notification) => [notification.userId, notification.type])).toEqual([
+    [7, 3],
+    [9, 2],
+  ]);
+  expect(push).toHaveBeenCalledTimes(2);
 });

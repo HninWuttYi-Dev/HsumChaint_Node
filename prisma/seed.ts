@@ -1,4 +1,5 @@
 import { prisma } from '../src/lib/prisma';
+import { DONATION_PERMISSIONS } from '../src/modules/space/donation.schema';
 import { logger } from '../src/utils/logger';
 
 export const SYSTEM_ROLES = [
@@ -31,6 +32,7 @@ export const SPACE_ROLES = [
 ];
 
 export const SYSTEM_PERMISSIONS = [
+  ...DONATION_PERMISSIONS,
   // User Management
   'User.View',
   'User.Create',
@@ -163,10 +165,18 @@ async function seedRbac() {
     'Monastery.Update',
     'Monastery.Delete',
     'Monastery.ManageMembers',
+    ...DONATION_PERMISSIONS,
   ]);
 
   // Donor (2): Read-only view
-  await assignSysPermissions(2, ['User.View', 'Donor.View', 'Monastery.View']);
+  await assignSysPermissions(2, [
+    'User.View',
+    'Donor.View',
+    'Monastery.View',
+    'Donation.View',
+    'Donation.Create',
+    'Donation.Cancel',
+  ]);
 
   logger.info('Seeding Space Roles and Space Permissions...');
 

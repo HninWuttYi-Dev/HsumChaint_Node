@@ -74,6 +74,7 @@ interface MockSpaceRolePermission {
   id: number;
   spaceRoleId: number;
   spacePermissionId: number;
+  isDeleted?: boolean;
 }
 
 interface MockInvitation {

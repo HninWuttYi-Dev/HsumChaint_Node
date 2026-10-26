@@ -190,9 +190,9 @@ model DonorList {
   dropoffTime         DateTime? @map("dropoff_time")
   completedAt         DateTime? @map("completed_at")
   
-  monasterySpace      MonasterySpace @relation(fields: [monasterySpaceId], references: [id], onDelete: Cascade)
-  donor               User?          @relation("DonorUser", fields: [donorId], references: [id], onDelete: SetNull)
-  reviewer            User?          @relation("ReviewerUser", fields: [reviewerId], references: [id], onDelete: SetNull)
+  monasterySpace      MonasterySpace @relation(fields: [monasterySpaceId], references: [id])
+  donor               User?          @relation("DonorUser", fields: [donorId], references: [id], onDelete: Restrict)
+  reviewer            User?          @relation("ReviewerUser", fields: [reviewerId], references: [id])
   
   @@index([monasterySpaceId], map: "IX_Donor_List_monastery_space_id")
   @@index([donorId], map: "IX_Donor_List_donor_id")

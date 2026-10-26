@@ -211,6 +211,14 @@ docker-compose -f docker-compose-development.yml --env-file .env down -v
 | `POST` | `/api/v1/users` | Create a user | ❌ |
 | `DELETE` | `/api/v1/users/:id` | Delete a user | ❌ |
 
+### Space donations
+
+The C# donation workflow is available under `/api/v1/donations`, with space-scoped
+aliases under `/api/v1/spaces/:spaceId/donations`. It supports donor requests,
+manual/offline donations, review, scheduling, completion, cancellation, batch
+and recurring bookings, history and monthly summaries. See [the donation API guide](src/modules/space/DONATIONS.md)
+for permissions, enum values, examples, migration requirements and tests.
+
 ### Monitoring
 
 | Method | Endpoint | Description |
