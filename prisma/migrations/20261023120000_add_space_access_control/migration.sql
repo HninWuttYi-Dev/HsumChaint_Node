@@ -49,7 +49,7 @@ INSERT INTO `Space_Role` (`id`, `name`, `description`) VALUES
 -- 5. Seed the 10 Space Permissions
 INSERT INTO `Space_Permission` (`id`, `name`, `description`) VALUES
 (1, 'Space.View', 'View space details, members, and general activities'),
-(2, 'Space.Settings.Edit', 'Update monastery space profile and settings'),
+(2, 'Space.Update', 'Update monastery space profile and details'),
 (3, 'Space.Delete', 'Delete monastery space'),
 (4, 'Space.Member.Invite', 'Invite new members to the monastery space'),
 (5, 'Space.Member.Manage', 'Manage existing member statuses and roles'),

@@ -63,8 +63,8 @@ export const SPACE_PERMISSIONS = [
     description: 'View space details, members, and general activities',
   },
   {
-    name: 'Space.Settings.Edit',
-    description: 'Update monastery space profile and settings',
+    name: 'Space.Update',
+    description: 'Update monastery space profile and details',
   },
   {
     name: 'Space.Delete',
