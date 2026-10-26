@@ -352,14 +352,10 @@ export const deleteRoleService = async (id: number): Promise<{ message: string }
     throw new AppError('The system Admin role cannot be deleted.', 400);
   }
 
-  // Check if role is assigned to users, members, or pending invitations
-  const [hasUser, hasMember, hasInvitation] = await Promise.all([
-    prisma.user.findFirst({ where: { roleId: id, isDeleted: false } }),
-    prisma.monasteryMember.findFirst({ where: { role: id } }),
-    prisma.invitation.findFirst({ where: { role: id, status: 0 } }),
-  ]);
+  // Check if role is assigned to users
+  const hasUser = await prisma.user.findFirst({ where: { roleId: id, isDeleted: false } });
 
-  if (hasUser || hasMember || hasInvitation) {
+  if (hasUser) {
     throw new AppError('Role is assigned to users, members or pending invitations.', 400);
   }
 
@@ -495,4 +491,41 @@ export const getUserPermissionsService = async (userId: number): Promise<string[
   return rolePermissions
     .map((rp) => rp.permission?.name)
     .filter((name): name is string => Boolean(name));
+};
+
+export interface UserPermissionsDetailDto {
+  userId: number;
+  roleId: number | null;
+  roleName: string | null;
+  permissions: string[];
+}
+
+/**
+ * Get user permission details including userId, roleId, roleName, and permissions
+ */
+export const getUserPermissionsDetailService = async (
+  userId: number
+): Promise<UserPermissionsDetailDto> => {
+  const user = await prisma.user.findFirst({
+    where: { id: userId, isDeleted: false },
+    include: { role: true },
+  });
+
+  if (!user?.role || user.role.isDeleted) {
+    return {
+      userId,
+      roleId: null,
+      roleName: null,
+      permissions: [],
+    };
+  }
+
+  const permissions = await getUserPermissionsService(userId);
+
+  return {
+    userId: user.id,
+    roleId: user.roleId,
+    roleName: user.role.name,
+    permissions,
+  };
 };

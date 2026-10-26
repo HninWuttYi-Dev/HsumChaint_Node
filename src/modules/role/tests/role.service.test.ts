@@ -6,6 +6,7 @@ import {
   getPermissionsService,
   getRoleByIdService,
   getRolesService,
+  getUserPermissionsDetailService,
   getUserPermissionsService,
   updateRoleService,
 } from '../role.service';
@@ -466,6 +467,25 @@ describe('Role & Dynamic RBAC Service Unit Tests', () => {
     it('should return empty list for user without role or if user is deleted', async () => {
       const permissions = await getUserPermissionsService(999);
       expect(permissions).toEqual([]);
+    });
+  });
+
+  describe('getUserPermissionsDetailService', () => {
+    it('should retrieve full user permission details with userId, roleId, roleName, and permissions', async () => {
+      const details = await getUserPermissionsDetailService(1);
+      expect(details.userId).toBe(1);
+      expect(details.roleId).toBe(3);
+      expect(details.roleName).toBe('Admin');
+      expect(details.permissions.length).toBe(5);
+      expect(details.permissions).toContain('Role.View');
+    });
+
+    it('should return empty permissions and null role for non-existent user', async () => {
+      const details = await getUserPermissionsDetailService(999);
+      expect(details.userId).toBe(999);
+      expect(details.roleId).toBeNull();
+      expect(details.roleName).toBeNull();
+      expect(details.permissions).toEqual([]);
     });
   });
 });
