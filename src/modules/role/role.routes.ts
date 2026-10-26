@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authMiddleWare } from '@/middlewares/authMiddleWare';
 import { checkPermission } from '@/middlewares/permissionMiddleware';
 import { validator } from '@/middlewares/validator';
+import { getSpaceRoleById, getSpaceRoles } from '../space/space.controller';
 import {
   assignPermissions,
   createRole,
@@ -27,8 +28,17 @@ const router = Router();
 // Require authentication for all role/permission routes
 router.use(authMiddleWare);
 
+// Space Roles (Space Admin, Space Moderator, Space Editor, Space Member)
+router.get('/space-roles', getSpaceRoles);
+router.get('/space-roles/:id', validator(roleIdParamSchema), getSpaceRoleById);
+
 // 1. Permissions catalog endpoint
-router.get('/permissions', validator(getPermissionsQuerySchema), getPermissions);
+router.get(
+  '/permissions',
+  checkPermission('Role.View'),
+  validator(getPermissionsQuerySchema),
+  getPermissions
+);
 
 // 2. Assign permissions endpoint
 router.post(
