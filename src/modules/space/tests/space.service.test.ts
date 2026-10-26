@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { SPACE_ROLES } from '../space.permissions';
 import {
   createMonasteryService,
   deleteMonasteryService,
   getMembersService,
   getMonasteryService,
   getMyMonasteriesService,
+  getSpaceRoleByIdService,
+  getSpaceRolesService,
   inviteMemberService,
   removeMemberService,
   respondToInvitationService,
@@ -33,11 +36,17 @@ interface MockMember {
   id: number;
   userId: number;
   monasterySpaceId: number;
-  role: number;
+  spaceRoleId: number;
   isOwner: boolean;
 }
 
 interface MockRole {
+  id: number;
+  name: string;
+  isDeleted: boolean;
+}
+
+interface MockSpaceRole {
   id: number;
   name: string;
   isDeleted: boolean;
@@ -55,12 +64,24 @@ interface MockRolePermission {
   permissionId: number;
 }
 
+interface MockSpacePermission {
+  id: number;
+  name: string;
+  isDeleted: boolean;
+}
+
+interface MockSpaceRolePermission {
+  id: number;
+  spaceRoleId: number;
+  spacePermissionId: number;
+}
+
 interface MockInvitation {
   id: number;
   monasterySpaceId: number;
   invitedUserId: number;
   invitedById: number;
-  role: number;
+  spaceRoleId: number;
   status: number;
   createdAt: Date;
 }
@@ -78,10 +99,21 @@ let mockUsers: MockUser[] = [];
 let mockSpaces: MockSpace[] = [];
 let mockMembers: MockMember[] = [];
 let mockRoles: MockRole[] = [];
+let mockSpaceRoles: MockSpaceRole[] = [];
 let mockPermissions: MockPermission[] = [];
 let mockRolePermissions: MockRolePermission[] = [];
+let mockSpacePermissions: MockSpacePermission[] = [];
+let mockSpaceRolePermissions: MockSpaceRolePermission[] = [];
 let mockInvitations: MockInvitation[] = [];
 let mockNotifications: MockNotification[] = [];
+mock.module('@/lib/redis', () => ({
+  redis: {
+    get: mock(async () => null),
+    set: mock(async () => 'OK'),
+    del: mock(async () => 1),
+    keys: mock(async () => []),
+  },
+}));
 
 mock.module('@/lib/prisma', () => ({
   prisma: {
@@ -145,58 +177,112 @@ mock.module('@/lib/prisma', () => ({
       count: mock(async () => mockSpaces.filter((s) => !s.isDeleted).length),
     },
     monasteryMember: {
-      create: mock(async ({ data }: { data: Omit<MockMember, 'id'> }) => {
-        const member: MockMember = {
-          id: mockMembers.length + 1,
-          userId: data.userId,
-          monasterySpaceId: data.monasterySpaceId,
-          role: data.role,
-          isOwner: data.isOwner,
-        };
-        mockMembers.push(member);
-        return member;
-      }),
+      create: mock(
+        async ({
+          data,
+        }: {
+          data: {
+            userId: number;
+            monasterySpaceId: number;
+            spaceRoleId?: number;
+            role?: number;
+            isOwner: boolean;
+          };
+        }) => {
+          const member: MockMember = {
+            id: mockMembers.length + 1,
+            userId: data.userId,
+            monasterySpaceId: data.monasterySpaceId,
+            spaceRoleId: data.spaceRoleId ?? data.role ?? 1,
+            isOwner: data.isOwner,
+          };
+          mockMembers.push(member);
+          return {
+            ...member,
+            spaceRole: mockSpaceRoles.find((sr) => sr.id === member.spaceRoleId),
+          };
+        }
+      ),
       findFirst: mock(
         async ({
           where,
         }: {
-          where: { userId?: number; monasterySpaceId?: number; role?: number };
+          where: {
+            userId?: number;
+            monasterySpaceId?: number;
+            spaceRoleId?: number;
+            role?: number;
+            user?: { isDeleted?: boolean };
+          };
         }) => {
-          return (
-            mockMembers.find(
-              (m) =>
-                (where.userId === undefined || m.userId === where.userId) &&
-                (where.monasterySpaceId === undefined ||
-                  m.monasterySpaceId === where.monasterySpaceId) &&
-                (where.role === undefined || m.role === where.role)
-            ) ?? null
-          );
+          const targetRole = where.spaceRoleId ?? where.role;
+          const m = mockMembers.find((m) => {
+            const user = mockUsers.find((u) => u.id === m.userId);
+            if (where.user?.isDeleted !== undefined && user?.isDeleted !== where.user.isDeleted) {
+              return false;
+            }
+            return (
+              (where.userId === undefined || m.userId === where.userId) &&
+              (where.monasterySpaceId === undefined ||
+                m.monasterySpaceId === where.monasterySpaceId) &&
+              (targetRole === undefined || m.spaceRoleId === targetRole)
+            );
+          });
+          if (!m) return null;
+          return {
+            ...m,
+            spaceRole: mockSpaceRoles.find((sr) => sr.id === m.spaceRoleId),
+          };
         }
       ),
       findMany: mock(
-        async ({ where }: { where: { userId?: number; monasterySpaceId?: number } }) => {
+        async ({
+          where,
+        }: {
+          where: {
+            userId?: number;
+            monasterySpaceId?: number;
+            user?: { isDeleted?: boolean };
+          };
+        }) => {
           return mockMembers
-            .filter(
-              (m) =>
+            .filter((m) => {
+              const user = mockUsers.find((u) => u.id === m.userId);
+              if (where.user?.isDeleted !== undefined && user?.isDeleted !== where.user.isDeleted) {
+                return false;
+              }
+              return (
                 (where.userId === undefined || m.userId === where.userId) &&
                 (where.monasterySpaceId === undefined ||
                   m.monasterySpaceId === where.monasterySpaceId)
-            )
+              );
+            })
             .map((m) => ({
               ...m,
               user: mockUsers.find((u) => u.id === m.userId),
               monasterySpace: mockSpaces.find((s) => s.id === m.monasterySpaceId),
+              spaceRole: mockSpaceRoles.find((sr) => sr.id === m.spaceRoleId),
             }));
         }
       ),
       update: mock(
-        async ({ where, data }: { where: { id: number }; data: Partial<MockMember> }) => {
+        async ({
+          where,
+          data,
+        }: {
+          where: { id: number };
+          data: Partial<MockMember> & { role?: number };
+        }) => {
           const member = mockMembers.find((m) => m.id === where.id);
           if (!member) throw new Error('Not found');
-          Object.assign(member, data);
+          if (data.spaceRoleId !== undefined) member.spaceRoleId = data.spaceRoleId;
+          else if (data.role !== undefined) member.spaceRoleId = data.role;
+          if (data.isOwner !== undefined) member.isOwner = data.isOwner;
+
           return {
             ...member,
             user: mockUsers.find((u) => u.id === member.userId),
+            spaceRole: mockSpaceRoles.find((sr) => sr.id === member.spaceRoleId),
           };
         }
       ),
@@ -216,14 +302,138 @@ mock.module('@/lib/prisma', () => ({
         async ({
           where,
         }: {
-          where?: { userId?: number; monasterySpaceId?: number; role?: number };
+          where?: {
+            userId?: number;
+            monasterySpaceId?: number;
+            spaceRoleId?: number;
+            role?: number;
+            user?: { isDeleted?: boolean };
+          };
         }) => {
-          return mockMembers.filter(
-            (m) =>
+          const targetRole = where?.spaceRoleId ?? where?.role;
+          return mockMembers.filter((m) => {
+            const user = mockUsers.find((u) => u.id === m.userId);
+            if (where?.user?.isDeleted !== undefined && user?.isDeleted !== where.user.isDeleted) {
+              return false;
+            }
+            return (
               (!where?.userId || m.userId === where.userId) &&
               (!where?.monasterySpaceId || m.monasterySpaceId === where.monasterySpaceId) &&
-              (!where?.role || m.role === where.role)
-          ).length;
+              (!targetRole || m.spaceRoleId === targetRole)
+            );
+          }).length;
+        }
+      ),
+    },
+    spaceRole: {
+      findMany: mock(
+        async ({
+          where,
+          include,
+        }: {
+          where?: { id?: { in?: number[] }; isDeleted?: boolean };
+          include?: { permissions?: { include?: { spacePermission?: boolean } } };
+        } = {}) => {
+          const list = mockSpaceRoles.filter(
+            (r) =>
+              (!where?.isDeleted || !r.isDeleted) && (!where?.id?.in || where.id.in.includes(r.id))
+          );
+          if (include?.permissions) {
+            return list.map((role) => ({
+              ...role,
+              permissions: mockSpaceRolePermissions
+                .filter((srp) => srp.spaceRoleId === role.id && !srp.isDeleted)
+                .map((srp) => ({
+                  ...srp,
+                  spacePermission: mockSpacePermissions.find(
+                    (sp) => sp.id === srp.spacePermissionId
+                  ),
+                })),
+            }));
+          }
+          return list;
+        }
+      ),
+      findFirst: mock(
+        async ({
+          where,
+          include,
+        }: {
+          where: { id?: number; name?: string; isDeleted?: boolean };
+          include?: { permissions?: { include?: { spacePermission?: boolean } } };
+        }) => {
+          const role =
+            mockSpaceRoles.find(
+              (r) =>
+                (!where.id || r.id === where.id) &&
+                (!where.name || r.name.toLowerCase() === where.name.toLowerCase()) &&
+                (!where.isDeleted || !r.isDeleted)
+            ) ?? null;
+          if (!role) return null;
+          if (include?.permissions) {
+            return {
+              ...role,
+              permissions: mockSpaceRolePermissions
+                .filter((srp) => srp.spaceRoleId === role.id && !srp.isDeleted)
+                .map((srp) => ({
+                  ...srp,
+                  spacePermission: mockSpacePermissions.find(
+                    (sp) => sp.id === srp.spacePermissionId
+                  ),
+                })),
+            };
+          }
+          return role;
+        }
+      ),
+      findUnique: mock(async ({ where }: { where: { id: number } }) => {
+        return mockSpaceRoles.find((r) => r.id === where.id) ?? null;
+      }),
+    },
+    spaceRolePermission: {
+      count: mock(
+        async ({
+          where,
+        }: {
+          where: {
+            spaceRoleId?: number;
+            spacePermission?: { name?: { in?: string[] }; isDeleted?: boolean };
+          };
+        }) => {
+          return mockSpaceRolePermissions.filter((srp) => {
+            if (where.spaceRoleId && srp.spaceRoleId !== where.spaceRoleId) return false;
+            const perm = mockSpacePermissions.find((p) => p.id === srp.spacePermissionId);
+            if (!perm || perm.isDeleted) return false;
+            if (
+              where.spacePermission?.name?.in &&
+              !where.spacePermission.name.in.includes(perm.name)
+            )
+              return false;
+            return true;
+          }).length;
+        }
+      ),
+      findMany: mock(
+        async ({
+          where,
+        }: {
+          where?: {
+            spaceRoleId?: number;
+            isDeleted?: boolean;
+            spaceRole?: { isDeleted?: boolean };
+            spacePermission?: { isDeleted?: boolean };
+          };
+        } = {}) => {
+          return mockSpaceRolePermissions
+            .filter((srp) => {
+              if (where?.spaceRoleId && srp.spaceRoleId !== where.spaceRoleId) return false;
+              return true;
+            })
+            .map((srp) => ({
+              ...srp,
+              spacePermission: mockSpacePermissions.find((p) => p.id === srp.spacePermissionId),
+              spaceRole: mockSpaceRoles.find((r) => r.id === srp.spaceRoleId),
+            }));
         }
       ),
     },
@@ -275,19 +485,35 @@ mock.module('@/lib/prisma', () => ({
       findMany: mock(async () => mockRolePermissions),
     },
     invitation: {
-      create: mock(async ({ data }: { data: Omit<MockInvitation, 'id' | 'createdAt'> }) => {
-        const inv: MockInvitation = {
-          id: mockInvitations.length + 1,
-          monasterySpaceId: data.monasterySpaceId,
-          invitedUserId: data.invitedUserId,
-          invitedById: data.invitedById,
-          role: data.role,
-          status: data.status,
-          createdAt: new Date(),
-        };
-        mockInvitations.push(inv);
-        return inv;
-      }),
+      create: mock(
+        async ({
+          data,
+        }: {
+          data: {
+            monasterySpaceId: number;
+            invitedUserId: number;
+            invitedById: number;
+            spaceRoleId?: number;
+            role?: number;
+            status: number;
+          };
+        }) => {
+          const inv: MockInvitation = {
+            id: mockInvitations.length + 1,
+            monasterySpaceId: data.monasterySpaceId,
+            invitedUserId: data.invitedUserId,
+            invitedById: data.invitedById,
+            spaceRoleId: data.spaceRoleId ?? data.role ?? 4,
+            status: data.status,
+            createdAt: new Date(),
+          };
+          mockInvitations.push(inv);
+          return {
+            ...inv,
+            spaceRole: mockSpaceRoles.find((sr) => sr.id === inv.spaceRoleId),
+          };
+        }
+      ),
       findFirst: mock(
         async ({
           where,
@@ -295,31 +521,44 @@ mock.module('@/lib/prisma', () => ({
           where: {
             monasterySpaceId?: number;
             invitedUserId?: number;
+            spaceRoleId?: number;
             role?: number;
             status?: number;
           };
         }) => {
-          return (
-            mockInvitations.find(
-              (i) =>
-                (where.monasterySpaceId === undefined ||
-                  i.monasterySpaceId === where.monasterySpaceId) &&
-                (where.invitedUserId === undefined || i.invitedUserId === where.invitedUserId) &&
-                (where.role === undefined || i.role === where.role) &&
-                (where.status === undefined || i.status === where.status)
-            ) ?? null
+          const targetRole = where.spaceRoleId ?? where.role;
+          const inv = mockInvitations.find(
+            (i) =>
+              (where.monasterySpaceId === undefined ||
+                i.monasterySpaceId === where.monasterySpaceId) &&
+              (where.invitedUserId === undefined || i.invitedUserId === where.invitedUserId) &&
+              (targetRole === undefined || i.spaceRoleId === targetRole) &&
+              (where.status === undefined || i.status === where.status)
           );
+          if (!inv) return null;
+          return {
+            ...inv,
+            spaceRole: mockSpaceRoles.find((sr) => sr.id === inv.spaceRoleId),
+          };
         }
       ),
       findUnique: mock(async ({ where }: { where: { id: number } }) => {
-        return mockInvitations.find((i) => i.id === where.id) ?? null;
+        const inv = mockInvitations.find((i) => i.id === where.id);
+        if (!inv) return null;
+        return {
+          ...inv,
+          spaceRole: mockSpaceRoles.find((sr) => sr.id === inv.spaceRoleId),
+        };
       }),
       update: mock(
         async ({ where, data }: { where: { id: number }; data: Partial<MockInvitation> }) => {
           const inv = mockInvitations.find((i) => i.id === where.id);
           if (!inv) throw new Error('Not found');
           Object.assign(inv, data);
-          return inv;
+          return {
+            ...inv,
+            spaceRole: mockSpaceRoles.find((sr) => sr.id === inv.spaceRoleId),
+          };
         }
       ),
       deleteMany: mock(async ({ where }: { where: { monasterySpaceId?: number } }) => {
@@ -357,10 +596,13 @@ describe('Monastery Service Unit Tests (matching C# HsumChaint)', () => {
       { id: 1, name: 'Monk', isDeleted: false },
       { id: 2, name: 'Donor', isDeleted: false },
       { id: 3, name: 'Admin', isDeleted: false },
-      { id: 4, name: 'Space Admin', isDeleted: false },
-      { id: 5, name: 'Space Moderator', isDeleted: false },
-      { id: 6, name: 'Space Editor', isDeleted: false },
-      { id: 7, name: 'Space Member', isDeleted: false },
+    ];
+
+    mockSpaceRoles = [
+      { id: 1, name: 'Space Admin', isDeleted: false },
+      { id: 2, name: 'Space Moderator', isDeleted: false },
+      { id: 3, name: 'Space Editor', isDeleted: false },
+      { id: 4, name: 'Space Member', isDeleted: false },
     ];
 
     mockPermissions = [
@@ -369,15 +611,35 @@ describe('Monastery Service Unit Tests (matching C# HsumChaint)', () => {
       { id: 3, name: 'Monastery.Update', isDeleted: false },
       { id: 4, name: 'Monastery.Delete', isDeleted: false },
       { id: 5, name: 'Monastery.ManageMembers', isDeleted: false },
-      { id: 6, name: 'Space.Member.Manage', isDeleted: false },
+    ];
+
+    mockSpacePermissions = [
+      { id: 1, name: 'Space.View', isDeleted: false },
+      { id: 2, name: 'Space.Update', isDeleted: false },
+      { id: 3, name: 'Space.Delete', isDeleted: false },
+      { id: 4, name: 'Space.Member.Invite', isDeleted: false },
+      { id: 5, name: 'Space.Member.Manage', isDeleted: false },
+      { id: 6, name: 'Space.Role.Manage', isDeleted: false },
+      { id: 7, name: 'Space.Post.Create', isDeleted: false },
     ];
 
     mockRolePermissions = [
-      // Monk has manage members and delete
+      // Monk has delete permission
       { id: 1, roleId: 1, permissionId: 4 },
       { id: 2, roleId: 1, permissionId: 5 },
+    ];
+
+    mockSpaceRolePermissions = [
       // Space Admin has manage members
-      { id: 3, roleId: 4, permissionId: 6 },
+      { id: 1, spaceRoleId: 1, spacePermissionId: 5 },
+      // Space Moderator has view and invite members
+      { id: 2, spaceRoleId: 2, spacePermissionId: 1 },
+      { id: 3, spaceRoleId: 2, spacePermissionId: 4 },
+      // Space Editor has view and post create
+      { id: 4, spaceRoleId: 3, spacePermissionId: 1 },
+      { id: 5, spaceRoleId: 3, spacePermissionId: 7 },
+      // Space Member has view
+      { id: 6, spaceRoleId: 4, spacePermissionId: 1 },
     ];
 
     mockUsers = [
@@ -394,7 +656,7 @@ describe('Monastery Service Unit Tests (matching C# HsumChaint)', () => {
   });
 
   describe('CreateMonastery', () => {
-    it('should create monastery and add creator as owner', async () => {
+    it('should create monastery and add creator as owner with Space Admin role', async () => {
       const space = await createMonasteryService(1, {
         monasteryName: 'Maha Gandhayon',
         description: 'Historic Monastery in Amarapura',
@@ -403,13 +665,14 @@ describe('Monastery Service Unit Tests (matching C# HsumChaint)', () => {
 
       expect(space.monasteryName).toBe('Maha Gandhayon');
       expect(space.createdById).toBe(1);
-      expect(space.currentUserRoleId).toBe(1);
+      expect(space.currentUserRoleId).toBe(SPACE_ROLES.SPACE_ADMIN);
+      expect(space.currentUserRoleName).toBe('Space Admin');
       expect(space.isOwner).toBe(true);
 
       expect(mockSpaces.length).toBe(1);
       expect(mockMembers.length).toBe(1);
       expect(mockMembers[0].isOwner).toBe(true);
-      expect(mockMembers[0].role).toBe(1);
+      expect(mockMembers[0].spaceRoleId).toBe(SPACE_ROLES.SPACE_ADMIN);
     });
 
     it('should reject creation without monastery name', async () => {
@@ -457,6 +720,7 @@ describe('Monastery Service Unit Tests (matching C# HsumChaint)', () => {
 
       expect(retrieved.id).toBe(space.id);
       expect(retrieved.monasteryName).toBe('Monastery A');
+      expect(retrieved.currentUserRoleName).toBe('Space Admin');
     });
 
     it('should reject retrieval for non-member', async () => {
@@ -483,6 +747,7 @@ describe('Monastery Service Unit Tests (matching C# HsumChaint)', () => {
       const result = await getMyMonasteriesService(1, { page: 1, limit: 10 });
       expect(result.items.length).toBe(2);
       expect(result.total).toBe(2);
+      expect(result.items[0].currentUserRoleName).toBe('Space Admin');
     });
 
     it('should allow System Admin to list all monasteries even if not a member of them', async () => {
@@ -500,12 +765,13 @@ describe('Monastery Service Unit Tests (matching C# HsumChaint)', () => {
       const space = await createMonasteryService(1, { monasteryName: 'Monastery Invite' });
 
       const invitation = await inviteMemberService(1, space.id, {
-        roleId: 7, // Space Member
+        roleId: SPACE_ROLES.SPACE_MEMBER, // 4
         userId: 2,
       });
 
       expect(invitation.status).toBe(0); // Pending
-      expect(invitation.roleId).toBe(7);
+      expect(invitation.spaceRoleId).toBe(SPACE_ROLES.SPACE_MEMBER);
+      expect(invitation.spaceRoleName).toBe('Space Member');
       expect(mockInvitations.length).toBe(1);
       expect(mockNotifications.length).toBe(1);
       expect(mockNotifications[0].userId).toBe(2);
@@ -517,7 +783,7 @@ describe('Monastery Service Unit Tests (matching C# HsumChaint)', () => {
 
       expect(
         inviteMemberService(1, space.id, {
-          roleId: 7,
+          roleId: SPACE_ROLES.SPACE_MEMBER,
           userId: 1,
         })
       ).rejects.toThrow('User cannot invite themselves.');
@@ -529,13 +795,13 @@ describe('Monastery Service Unit Tests (matching C# HsumChaint)', () => {
         id: 99,
         userId: 2,
         monasterySpaceId: space.id,
-        role: 7,
+        spaceRoleId: SPACE_ROLES.SPACE_MEMBER,
         isOwner: false,
       });
 
       expect(
         inviteMemberService(1, space.id, {
-          roleId: 7,
+          roleId: SPACE_ROLES.SPACE_MEMBER,
           userId: 2,
         })
       ).rejects.toThrow('User is already a monastery member.');
@@ -544,7 +810,7 @@ describe('Monastery Service Unit Tests (matching C# HsumChaint)', () => {
     it('should allow user to accept invitation and become member', async () => {
       const space = await createMonasteryService(1, { monasteryName: 'Monastery Invite' });
       const invitation = await inviteMemberService(1, space.id, {
-        roleId: 7,
+        roleId: SPACE_ROLES.SPACE_MEMBER,
         userId: 2,
       });
 
@@ -559,7 +825,7 @@ describe('Monastery Service Unit Tests (matching C# HsumChaint)', () => {
     it('should allow user to reject invitation', async () => {
       const space = await createMonasteryService(1, { monasteryName: 'Monastery Invite' });
       const invitation = await inviteMemberService(1, space.id, {
-        roleId: 7,
+        roleId: SPACE_ROLES.SPACE_MEMBER,
         userId: 2,
       });
 
@@ -582,6 +848,10 @@ describe('Monastery Service Unit Tests (matching C# HsumChaint)', () => {
       expect(result.items.length).toBe(1);
       expect(result.items[0].name).toBe('Sayadaw U Thila');
       expect(result.items[0].isOwner).toBe(true);
+      expect(result.items[0].spaceRoleName).toBe('Space Admin');
+      expect(result.items[0].permissions).toBeArray();
+      expect(result.items[0].permissions).toContain('Space.View');
+      expect(result.items[0].permissions).toContain('Space.Update');
     });
 
     it('should allow System Admin to view members of any space without being a member', async () => {
@@ -590,6 +860,30 @@ describe('Monastery Service Unit Tests (matching C# HsumChaint)', () => {
 
       expect(result.items.length).toBe(1);
       expect(result.items[0].name).toBe('Sayadaw U Thila');
+      expect(result.items[0].permissions).toBeArray();
+    });
+
+    it('should exclude soft-deleted users from member list', async () => {
+      const space = await createMonasteryService(1, { monasteryName: 'Monastery Active Members' });
+      // Add a member whose user is soft deleted
+      mockUsers.push({
+        id: 99,
+        phone: '09999999998',
+        name: 'Deleted Monk',
+        roleId: 1,
+        isDeleted: true,
+      });
+      mockMembers.push({
+        id: 99,
+        userId: 99,
+        monasterySpaceId: space.id,
+        spaceRoleId: SPACE_ROLES.SPACE_MEMBER,
+        isOwner: false,
+      });
+
+      const result = await getMembersService(1, space.id, { page: 1, limit: 10 });
+      expect(result.items.some((m) => m.userId === 99)).toBe(false);
+      expect(result.total).toBe(1);
     });
 
     it('should update member role (except owner)', async () => {
@@ -598,19 +892,24 @@ describe('Monastery Service Unit Tests (matching C# HsumChaint)', () => {
         id: 2,
         userId: 2,
         monasterySpaceId: space.id,
-        role: 7,
+        spaceRoleId: SPACE_ROLES.SPACE_MEMBER,
         isOwner: false,
       });
 
-      const updated = await updateMemberRoleService(1, space.id, 2, { roleId: 5 });
-      expect(updated.roleId).toBe(5);
+      const updated = await updateMemberRoleService(1, space.id, 2, {
+        roleId: SPACE_ROLES.SPACE_MODERATOR,
+      });
+      expect(updated.spaceRoleId).toBe(SPACE_ROLES.SPACE_MODERATOR);
+      expect(updated.spaceRoleName).toBe('Space Moderator');
+      expect(updated.permissions).toBeArray();
+      expect(updated.permissions).toContain('Space.View');
     });
 
     it('should prevent modifying owner role', async () => {
       const space = await createMonasteryService(1, { monasteryName: 'Monastery Roles' });
-      expect(updateMemberRoleService(1, space.id, 1, { roleId: 5 })).rejects.toThrow(
-        'Owner member role cannot be changed.'
-      );
+      expect(
+        updateMemberRoleService(1, space.id, 1, { roleId: SPACE_ROLES.SPACE_MODERATOR })
+      ).rejects.toThrow('Owner member role cannot be changed.');
     });
 
     it('should remove a member from the monastery', async () => {
@@ -619,7 +918,7 @@ describe('Monastery Service Unit Tests (matching C# HsumChaint)', () => {
         id: 2,
         userId: 2,
         monasterySpaceId: space.id,
-        role: 7,
+        spaceRoleId: SPACE_ROLES.SPACE_MEMBER,
         isOwner: false,
       });
 
@@ -633,6 +932,89 @@ describe('Monastery Service Unit Tests (matching C# HsumChaint)', () => {
       expect(removeMemberService(1, space.id, 1)).rejects.toThrow(
         'Owner member cannot be removed.'
       );
+    });
+
+    it('should allow System Admin to update member role without being a space member', async () => {
+      const space = await createMonasteryService(1, { monasteryName: 'Monastery Admin Manage' });
+      mockMembers.push({
+        id: 2,
+        userId: 2,
+        monasterySpaceId: space.id,
+        spaceRoleId: SPACE_ROLES.SPACE_MEMBER,
+        isOwner: false,
+      });
+
+      // User 4 is Admin (roleId 3) and NOT in mockMembers for this space
+      const updated = await updateMemberRoleService(
+        4,
+        space.id,
+        2,
+        { roleId: SPACE_ROLES.SPACE_MODERATOR },
+        3
+      );
+      expect(updated.spaceRoleId).toBe(SPACE_ROLES.SPACE_MODERATOR);
+      expect(updated.spaceRoleName).toBe('Space Moderator');
+    });
+
+    it('should allow System Admin to remove a member without being a space member', async () => {
+      const space = await createMonasteryService(1, { monasteryName: 'Monastery Admin Remove' });
+      mockMembers.push({
+        id: 2,
+        userId: 2,
+        monasterySpaceId: space.id,
+        spaceRoleId: SPACE_ROLES.SPACE_MEMBER,
+        isOwner: false,
+      });
+
+      // User 4 is Admin (roleId 3)
+      const removed = await removeMemberService(4, space.id, 2, 3);
+      expect(removed.userId).toBe(2);
+      expect(mockMembers.some((m) => m.userId === 2)).toBe(false);
+    });
+
+    it('should allow System Admin to invite a member without being a space member', async () => {
+      const space = await createMonasteryService(1, { monasteryName: 'Monastery Admin Invite' });
+      const invitation = await inviteMemberService(
+        4,
+        space.id,
+        { userId: 2, roleId: SPACE_ROLES.SPACE_MEMBER },
+        3
+      );
+      expect(invitation.invitedUserId).toBe(2);
+      expect(invitation.spaceRoleName).toBe('Space Member');
+    });
+
+    it('should retrieve all space roles via getSpaceRolesService', async () => {
+      const roles = await getSpaceRolesService();
+      expect(roles.length).toBe(4);
+      expect(roles.map((r) => r.roleName)).toEqual([
+        'Space Admin',
+        'Space Moderator',
+        'Space Editor',
+        'Space Member',
+      ]);
+      const editorRole = roles.find((r) => r.roleName === 'Space Editor');
+      expect(editorRole).toBeDefined();
+      expect(editorRole?.permissions.some((p) => p.permissionName === 'Space.View')).toBe(true);
+      expect(editorRole?.permissions.some((p) => p.permissionName === 'Space.Post.Create')).toBe(
+        true
+      );
+      expect(editorRole?.permissions[0].module).toBe('Space');
+      expect(editorRole?.permissions[0].action).toBe('View');
+      expect(editorRole?.permissions[0].displayName).toBe('View Space');
+      expect(editorRole?.permissions[0].category).toBe('Monastery & Space');
+    });
+
+    it('should retrieve a space role by ID via getSpaceRoleByIdService', async () => {
+      const role = await getSpaceRoleByIdService(2);
+      expect(role.roleId).toBe(2);
+      expect(role.roleName).toBe('Space Moderator');
+      expect(role.permissions.some((p) => p.permissionName === 'Space.View')).toBe(true);
+      expect(role.permissions[0].module).toBe('Space');
+    });
+
+    it('should throw 404 if space role not found', async () => {
+      expect(getSpaceRoleByIdService(999)).rejects.toThrow('Space role not found.');
     });
   });
 });

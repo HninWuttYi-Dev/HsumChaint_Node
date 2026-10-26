@@ -7,12 +7,33 @@ import {
   getMembersService,
   getMonasteryService,
   getMyMonasteriesService,
+  getSpaceRoleByIdService,
+  getSpaceRolesService,
   inviteMemberService,
   removeMemberService,
   respondToInvitationService,
   updateMemberRoleService,
   updateMonasteryService,
 } from './space.service';
+
+export const getSpaceRoles = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const roles = await getSpaceRolesService();
+    return successResponse(res, { roles }, 'Space roles retrieved successfully.');
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getSpaceRoleById = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const roleId = Number(req.params.id);
+    const role = await getSpaceRoleByIdService(roleId);
+    return successResponse(res, role, 'Space role retrieved successfully.');
+  } catch (err) {
+    next(err);
+  }
+};
 
 export const createSpace = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -84,7 +105,12 @@ export const deleteSpace = async (req: Request, res: Response, next: NextFunctio
 export const inviteMember = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const spaceId = Number(req.params.id);
-    const invitation = await inviteMemberService(req.user.userId, spaceId, req.body);
+    const invitation = await inviteMemberService(
+      req.user.userId,
+      spaceId,
+      req.body,
+      req.user.roleId
+    );
     return successResponse(res, invitation, 'Invitation created successfully.', 201);
   } catch (err) {
     next(err);
@@ -129,7 +155,13 @@ export const updateMemberRole = async (req: Request, res: Response, next: NextFu
   try {
     const spaceId = Number(req.params.id);
     const userId = Number(req.params.userId);
-    const updated = await updateMemberRoleService(req.user.userId, spaceId, userId, req.body);
+    const updated = await updateMemberRoleService(
+      req.user.userId,
+      spaceId,
+      userId,
+      req.body,
+      req.user.roleId
+    );
     return successResponse(res, updated, 'Member role updated successfully.');
   } catch (err) {
     next(err);
@@ -140,7 +172,7 @@ export const removeSpaceMember = async (req: Request, res: Response, next: NextF
   try {
     const spaceId = Number(req.params.id);
     const userId = Number(req.params.userId);
-    const result = await removeMemberService(req.user.userId, spaceId, userId);
+    const result = await removeMemberService(req.user.userId, spaceId, userId, req.user.roleId);
     return successResponse(res, result, 'Member removed successfully.');
   } catch (err) {
     next(err);
