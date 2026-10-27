@@ -1,5 +1,8 @@
 import { prisma } from '@/lib/prisma';
+import { getSpaceRolePermissions } from '@/middlewares/permissionMiddleware';
 import { AppError } from '@/utils/AppError';
+import { type FormattedPermission, formatPermission } from '../role/role.service';
+import { SPACE_PERMISSIONS, SPACE_ROLE_NAMES, SPACE_ROLES } from './space.permissions';
 import type {
   CreateSpaceInput,
   InviteMemberInput,
@@ -13,11 +16,29 @@ export interface MonasterySpaceDto {
   monasteryName: string;
   description: string | null;
   address: string | null;
-  createdById: number;
+  createdById: number | null;
   currentUserRoleId: number | null;
   currentUserRoleName: string | null;
   isOwner: boolean;
+  permissions: string[];
 }
+
+/**
+ * Resolves active space permissions for a user in a given space.
+ */
+export const resolveSpacePermissions = async (
+  spaceRoleId: number | null | undefined,
+  isOwner: boolean,
+  isAdmin = false
+): Promise<string[]> => {
+  if (isOwner || isAdmin || spaceRoleId === SPACE_ROLES.SPACE_ADMIN) {
+    return [...SPACE_PERMISSIONS];
+  }
+  if (!spaceRoleId) {
+    return [];
+  }
+  return await getSpaceRolePermissions(spaceRoleId);
+};
 
 export interface MonasteryMemberDto {
   id: number;
@@ -25,16 +46,21 @@ export interface MonasteryMemberDto {
   name: string | null;
   phone: string | null;
   monasterySpaceId: number;
+  spaceRoleId: number;
+  spaceRoleName: string | null;
   roleId: number;
   roleName: string | null;
   isOwner: boolean;
+  permissions: string[];
 }
 
 export interface InvitationResponseDto {
   invitationId: number;
   monasterySpaceId: number;
   invitedUserId: number;
-  invitedById: number;
+  invitedById: number | null;
+  spaceRoleId: number;
+  spaceRoleName: string | null;
   roleId: number;
   roleName: string | null;
   status: number;
@@ -43,21 +69,29 @@ export interface InvitationResponseDto {
 }
 
 /**
- * Checks if the member has permission to manage monastery (owner or has Monastery.ManageMembers)
+ * Checks if the member has permission to manage monastery (owner or has Space.Member.Manage)
  */
 export const canManageMonastery = async (
-  member: { role: number; isOwner: boolean } | null
+  member: { spaceRoleId?: number; role?: number; isOwner: boolean } | null
 ): Promise<boolean> => {
   if (!member) return false;
   if (member.isOwner) return true;
 
-  const count = await prisma.rolePermission.count({
+  const roleId = member.spaceRoleId ?? member.role;
+  if (!roleId) return false;
+
+  if (roleId === SPACE_ROLES.SPACE_ADMIN) return true;
+
+  const count = await prisma.spaceRolePermission.count({
     where: {
-      roleId: member.role,
-      role: { isDeleted: false },
-      permission: {
+      spaceRoleId: roleId,
+      isDeleted: false,
+      spaceRole: { isDeleted: false },
+      spacePermission: {
         isDeleted: false,
-        name: { in: ['Monastery.ManageMembers', 'Space.Member.Manage'] },
+        name: {
+          in: ['Space.Update', 'Space.Member.Manage', 'Space.Member.Invite', 'Space.Role.Manage'],
+        },
       },
     },
   });
@@ -70,26 +104,34 @@ export const canManageMonastery = async (
  */
 export const canDeleteMonastery = async (
   member:
-    | ({ role: number; isOwner: boolean } & {
+    | ({
+        spaceRoleId?: number;
+        role?: number;
+        isOwner: boolean;
+        userId?: number;
+      } & {
         roleData?: { name: string; isDeleted: boolean } | null;
       })
-    | null
+    | null,
+  currentUserId?: number
 ): Promise<boolean> => {
   if (!member?.isOwner) return false;
 
-  const role =
-    member.roleData ??
-    (await prisma.role.findFirst({
-      where: { id: member.role, isDeleted: false },
-    }));
+  const userId = member.userId ?? currentUserId;
+  if (!userId) return false;
 
-  if (!role || role.isDeleted || role.name.toLowerCase() !== 'monk') {
+  const user = await prisma.user.findFirst({
+    where: { id: userId, isDeleted: false },
+    include: { role: true },
+  });
+
+  if (!user?.role || user.role.isDeleted || user.role.name.toLowerCase() !== 'monk') {
     return false;
   }
 
   const count = await prisma.rolePermission.count({
     where: {
-      roleId: member.role,
+      roleId: user.roleId,
       role: { isDeleted: false },
       permission: {
         isDeleted: false,
@@ -109,6 +151,10 @@ export const getMember = async (userId: number, monasterySpaceId: number) => {
       userId,
       monasterySpaceId,
       monasterySpace: { isDeleted: false },
+      user: { isDeleted: false },
+    },
+    include: {
+      spaceRole: true,
     },
   });
 };
@@ -148,7 +194,7 @@ export const createMonasteryService = async (
       data: {
         userId: currentUserId,
         monasterySpaceId: monastery.id,
-        role: creator.roleId,
+        spaceRoleId: SPACE_ROLES.SPACE_ADMIN,
         isOwner: true,
       },
     });
@@ -159,11 +205,32 @@ export const createMonasteryService = async (
       description: monastery.description,
       address: monastery.address,
       createdById: monastery.createdById,
-      currentUserRoleId: creator.roleId,
-      currentUserRoleName: creator.role.name,
+      currentUserRoleId: SPACE_ROLES.SPACE_ADMIN,
+      currentUserRoleName: SPACE_ROLE_NAMES[SPACE_ROLES.SPACE_ADMIN],
       isOwner: true,
+      permissions: [...SPACE_PERMISSIONS],
     };
   });
+};
+
+/**
+ * Helper to check if a user is a System Admin (role ID 3 or role named 'Admin')
+ */
+export const checkIsAdmin = async (userId: number, roleId?: number): Promise<boolean> => {
+  if (roleId === 3) return true;
+  if (roleId) {
+    const role = await prisma.role.findFirst({
+      where: { id: roleId, isDeleted: false },
+    });
+    if (role && (role.id === 3 || role.name.toLowerCase() === 'admin')) {
+      return true;
+    }
+  }
+  const user = await prisma.user.findFirst({
+    where: { id: userId, isDeleted: false },
+    include: { role: true },
+  });
+  return Boolean(user?.role && (user.role.id === 3 || user.role.name.toLowerCase() === 'admin'));
 };
 
 /**
@@ -172,11 +239,13 @@ export const createMonasteryService = async (
 export const updateMonasteryService = async (
   currentUserId: number,
   monasterySpaceId: number,
-  request: UpdateSpaceInput
+  request: UpdateSpaceInput,
+  currentUserRoleId?: number
 ): Promise<MonasterySpaceDto> => {
   const member = await getMember(currentUserId, monasterySpaceId);
+  const isAdmin = await checkIsAdmin(currentUserId, currentUserRoleId);
 
-  if (!(await canManageMonastery(member))) {
+  if (!isAdmin && !(await canManageMonastery(member))) {
     throw new AppError('User is not authorized to manage this monastery.', 403);
   }
 
@@ -197,9 +266,10 @@ export const updateMonasteryService = async (
     },
   });
 
-  const memberRole = member?.role;
+  const memberSpaceRoleId = member?.spaceRoleId;
   const isOwner = member?.isOwner ?? false;
-  const role = memberRole ? await prisma.role.findUnique({ where: { id: memberRole } }) : null;
+  const spaceRoleName = member?.spaceRole?.name ?? (isAdmin ? 'Admin' : null);
+  const permissions = await resolveSpacePermissions(memberSpaceRoleId, isOwner, isAdmin);
 
   return {
     id: updated.id,
@@ -207,9 +277,10 @@ export const updateMonasteryService = async (
     description: updated.description,
     address: updated.address,
     createdById: updated.createdById,
-    currentUserRoleId: memberRole ?? null,
-    currentUserRoleName: role?.name ?? null,
+    currentUserRoleId: memberSpaceRoleId ?? (isAdmin ? null : (currentUserRoleId ?? null)),
+    currentUserRoleName: spaceRoleName,
     isOwner,
+    permissions,
   };
 };
 
@@ -218,7 +289,8 @@ export const updateMonasteryService = async (
  */
 export const deleteMonasteryService = async (
   currentUserId: number,
-  monasterySpaceId: number
+  monasterySpaceId: number,
+  currentUserRoleId?: number
 ): Promise<{ success: boolean; message: string }> => {
   const monastery = await prisma.monasterySpace.findFirst({
     where: { id: monasterySpaceId, isDeleted: false },
@@ -228,7 +300,9 @@ export const deleteMonasteryService = async (
   }
 
   const member = await getMember(currentUserId, monasterySpaceId);
-  if (!(await canDeleteMonastery(member))) {
+  const isAdmin = await checkIsAdmin(currentUserId, currentUserRoleId);
+
+  if (!isAdmin && !(await canDeleteMonastery(member, currentUserId))) {
     throw new AppError(
       'User is not authorized to delete this monastery. Only the monastery owner (Monk) can delete the space.',
       403
@@ -248,13 +322,9 @@ export const deleteMonasteryService = async (
  */
 export const getMonasteryService = async (
   currentUserId: number,
-  monasterySpaceId: number
+  monasterySpaceId: number,
+  currentUserRoleId?: number
 ): Promise<MonasterySpaceDto> => {
-  const member = await getMember(currentUserId, monasterySpaceId);
-  if (!member) {
-    throw new AppError('User is not a member of this monastery.', 403);
-  }
-
   const monastery = await prisma.monasterySpace.findFirst({
     where: { id: monasterySpaceId, isDeleted: false },
   });
@@ -262,7 +332,17 @@ export const getMonasteryService = async (
     throw new AppError('Monastery not found.', 404);
   }
 
-  const role = await prisma.role.findUnique({ where: { id: member.role } });
+  const member = await getMember(currentUserId, monasterySpaceId);
+  const isAdmin = await checkIsAdmin(currentUserId, currentUserRoleId);
+
+  if (!member && !isAdmin) {
+    throw new AppError('User is not a member of this monastery.', 403);
+  }
+
+  const roleId = member?.spaceRoleId ?? (isAdmin ? null : (currentUserRoleId ?? null));
+  const roleName = member?.spaceRole?.name ?? (isAdmin ? 'Admin' : null);
+  const isOwner = member?.isOwner ?? false;
+  const permissions = await resolveSpacePermissions(roleId, isOwner, isAdmin);
 
   return {
     id: monastery.id,
@@ -270,22 +350,97 @@ export const getMonasteryService = async (
     description: monastery.description,
     address: monastery.address,
     createdById: monastery.createdById,
-    currentUserRoleId: member.role,
-    currentUserRoleName: role?.name ?? null,
-    isOwner: member.isOwner,
+    currentUserRoleId: roleId,
+    currentUserRoleName: roleName,
+    isOwner,
+    permissions,
   };
 };
 
 /**
- * Get My Monasteries (matching C# GetMyMonasteries)
+ * Get My Monasteries (matching C# GetMyMonasteries, or all monasteries for System Admin)
  */
 export const getMyMonasteriesService = async (
   currentUserId: number,
-  pagination: { page?: number; limit?: number; search?: string }
+  pagination: { page?: number; limit?: number; search?: string },
+  currentUserRoleId?: number
 ) => {
   const page = pagination.page && pagination.page > 0 ? pagination.page : 1;
   const limit = pagination.limit && pagination.limit > 0 ? pagination.limit : 10;
   const skip = (page - 1) * limit;
+
+  const isAdmin = await checkIsAdmin(currentUserId, currentUserRoleId);
+
+  if (isAdmin) {
+    const spaceWhere: {
+      isDeleted: boolean;
+      OR?: { monasteryName?: { contains: string }; description?: { contains: string } }[];
+    } = {
+      isDeleted: false,
+    };
+
+    if (pagination.search) {
+      spaceWhere.OR = [
+        { monasteryName: { contains: pagination.search.trim() } },
+        { description: { contains: pagination.search.trim() } },
+      ];
+    }
+
+    const [spaces, total] = await Promise.all([
+      prisma.monasterySpace.findMany({
+        where: spaceWhere,
+        skip,
+        take: limit,
+        orderBy: { id: 'asc' },
+        include: {
+          members: {
+            where: { userId: currentUserId },
+            include: { spaceRole: true },
+          },
+        },
+      }),
+      prisma.monasterySpace.count({ where: spaceWhere }),
+    ]);
+
+    const distinctRoleIds = Array.from(
+      new Set(
+        spaces
+          .flatMap((s) => s.members?.map((m) => m.spaceRoleId) ?? [])
+          .filter((id): id is number => typeof id === 'number')
+      )
+    );
+    const rolePermMap = new Map<number, string[]>();
+    await Promise.all(
+      distinctRoleIds.map(async (id) => {
+        rolePermMap.set(id, await getSpaceRolePermissions(id));
+      })
+    );
+
+    const items: MonasterySpaceDto[] = spaces.map((s) => {
+      const myMembership = s.members && s.members.length > 0 ? s.members[0] : null;
+      const isOwner = myMembership ? myMembership.isOwner : false;
+      const perms =
+        isAdmin || isOwner
+          ? [...SPACE_PERMISSIONS]
+          : myMembership
+            ? (rolePermMap.get(myMembership.spaceRoleId) ?? [])
+            : [...SPACE_PERMISSIONS];
+
+      return {
+        id: s.id,
+        monasteryName: s.monasteryName,
+        description: s.description,
+        address: s.address,
+        createdById: s.createdById,
+        currentUserRoleId: myMembership ? myMembership.spaceRoleId : null,
+        currentUserRoleName: myMembership?.spaceRole?.name ?? 'Admin',
+        isOwner,
+        permissions: perms,
+      };
+    });
+
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
 
   const whereClause: {
     userId: number;
@@ -314,26 +469,40 @@ export const getMyMonasteriesService = async (
       take: limit,
       include: {
         monasterySpace: true,
+        spaceRole: true,
       },
       orderBy: { id: 'asc' },
     }),
     prisma.monasteryMember.count({ where: whereClause }),
   ]);
 
-  const roleIds = Array.from(new Set(memberships.map((m) => m.role)));
-  const roles = await prisma.role.findMany({ where: { id: { in: roleIds } } });
-  const roleMap = new Map(roles.map((r) => [r.id, r.name]));
+  const distinctRoleIds = Array.from(
+    new Set(
+      memberships.map((m) => m.spaceRoleId).filter((id): id is number => typeof id === 'number')
+    )
+  );
+  const rolePermMap = new Map<number, string[]>();
+  await Promise.all(
+    distinctRoleIds.map(async (id) => {
+      rolePermMap.set(id, await getSpaceRolePermissions(id));
+    })
+  );
 
-  const items: MonasterySpaceDto[] = memberships.map((m) => ({
-    id: m.monasterySpace.id,
-    monasteryName: m.monasterySpace.monasteryName,
-    description: m.monasterySpace.description,
-    address: m.monasterySpace.address,
-    createdById: m.monasterySpace.createdById,
-    currentUserRoleId: m.role,
-    currentUserRoleName: roleMap.get(m.role) ?? null,
-    isOwner: m.isOwner,
-  }));
+  const items: MonasterySpaceDto[] = memberships.map((m) => {
+    const perms = m.isOwner ? [...SPACE_PERMISSIONS] : (rolePermMap.get(m.spaceRoleId) ?? []);
+
+    return {
+      id: m.monasterySpace.id,
+      monasteryName: m.monasterySpace.monasteryName,
+      description: m.monasterySpace.description,
+      address: m.monasterySpace.address,
+      createdById: m.monasterySpace.createdById,
+      currentUserRoleId: m.spaceRoleId,
+      currentUserRoleName: m.spaceRole?.name ?? null,
+      isOwner: m.isOwner,
+      permissions: perms,
+    };
+  });
 
   return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
 };
@@ -344,18 +513,21 @@ export const getMyMonasteriesService = async (
 export const inviteMemberService = async (
   currentUserId: number,
   monasterySpaceId: number,
-  request: InviteMemberInput
+  request: InviteMemberInput,
+  currentUserRoleId?: number
 ): Promise<InvitationResponseDto> => {
   const inviter = await getMember(currentUserId, monasterySpaceId);
-  if (!(await canManageMonastery(inviter))) {
+  const isAdmin = await checkIsAdmin(currentUserId, currentUserRoleId);
+  if (!isAdmin && !(await canManageMonastery(inviter))) {
     throw new AppError('User is not authorized to invite monastery members.', 403);
   }
 
-  const role = await prisma.role.findFirst({
-    where: { id: request.roleId, isDeleted: false },
+  const targetRoleId = request.spaceRoleId ?? request.roleId ?? SPACE_ROLES.SPACE_MEMBER;
+  const spaceRole = await prisma.spaceRole.findFirst({
+    where: { id: targetRoleId, isDeleted: false },
   });
-  if (!role) {
-    throw new AppError('Role not found.', 404);
+  if (!spaceRole) {
+    throw new AppError('Space role not found.', 404);
   }
 
   let invitedUser = null;
@@ -411,7 +583,7 @@ export const inviteMemberService = async (
         monasterySpaceId,
         invitedUserId: invitedUser.id,
         invitedById: currentUserId,
-        role: request.roleId,
+        spaceRoleId: targetRoleId,
         status: 0, // Pending
       },
     });
@@ -431,8 +603,10 @@ export const inviteMemberService = async (
       monasterySpaceId,
       invitedUserId: invitedUser.id,
       invitedById: currentUserId,
-      roleId: request.roleId,
-      roleName: role.name,
+      spaceRoleId: targetRoleId,
+      spaceRoleName: spaceRole.name,
+      roleId: targetRoleId,
+      roleName: spaceRole.name,
       status: invitation.status,
       createdAt: invitation.createdAt,
     };
@@ -456,6 +630,7 @@ export const respondToInvitationService = async (
 
   const invitation = await prisma.invitation.findUnique({
     where: { id: invitationId },
+    include: { spaceRole: true },
   });
   if (!invitation) {
     throw new AppError('Invitation not found.', 404);
@@ -469,13 +644,15 @@ export const respondToInvitationService = async (
     throw new AppError('Invitation has already been answered.', 400);
   }
 
-  const role = await prisma.role.findFirst({
-    where: { id: invitation.role, isDeleted: false },
-  });
+  const spaceRole =
+    invitation.spaceRole ??
+    (await prisma.spaceRole.findFirst({
+      where: { id: invitation.spaceRoleId, isDeleted: false },
+    }));
 
   if (resolvedStatus === 1) {
     // Accept
-    if (!role) {
+    if (!spaceRole || spaceRole.isDeleted) {
       throw new AppError('Invitation role is inactive or not found.', 400);
     }
 
@@ -485,7 +662,7 @@ export const respondToInvitationService = async (
         data: {
           userId: currentUserId,
           monasterySpaceId: invitation.monasterySpaceId,
-          role: invitation.role,
+          spaceRoleId: invitation.spaceRoleId,
           isOwner: false,
         },
       });
@@ -495,6 +672,7 @@ export const respondToInvitationService = async (
   const updated = await prisma.invitation.update({
     where: { id: invitationId },
     data: { status: resolvedStatus },
+    include: { spaceRole: true },
   });
 
   return {
@@ -502,8 +680,10 @@ export const respondToInvitationService = async (
     monasterySpaceId: updated.monasterySpaceId,
     invitedUserId: updated.invitedUserId,
     invitedById: updated.invitedById,
-    roleId: updated.role,
-    roleName: role?.name ?? null,
+    spaceRoleId: updated.spaceRoleId,
+    spaceRoleName: updated.spaceRole?.name ?? spaceRole?.name ?? null,
+    roleId: updated.spaceRoleId,
+    roleName: updated.spaceRole?.name ?? spaceRole?.name ?? null,
     status: updated.status,
     createdAt: updated.createdAt,
     message:
@@ -519,10 +699,20 @@ export const respondToInvitationService = async (
 export const getMembersService = async (
   currentUserId: number,
   monasterySpaceId: number,
-  pagination: { page?: number; limit?: number }
+  pagination: { page?: number; limit?: number },
+  currentUserRoleId?: number
 ) => {
+  const monastery = await prisma.monasterySpace.findFirst({
+    where: { id: monasterySpaceId, isDeleted: false },
+  });
+  if (!monastery) {
+    throw new AppError('Monastery not found.', 404);
+  }
+
   const member = await getMember(currentUserId, monasterySpaceId);
-  if (!member) {
+  const isAdmin = await checkIsAdmin(currentUserId, currentUserRoleId);
+
+  if (!member && !isAdmin) {
     throw new AppError('User is not a member of this monastery.', 403);
   }
 
@@ -532,7 +722,10 @@ export const getMembersService = async (
 
   const [memberships, total] = await Promise.all([
     prisma.monasteryMember.findMany({
-      where: { monasterySpaceId },
+      where: {
+        monasterySpaceId,
+        user: { isDeleted: false },
+      },
       skip,
       take: limit,
       orderBy: { id: 'asc' },
@@ -540,25 +733,49 @@ export const getMembersService = async (
         user: {
           select: { id: true, name: true, phone: true },
         },
+        spaceRole: true,
       },
     }),
-    prisma.monasteryMember.count({ where: { monasterySpaceId } }),
+    prisma.monasteryMember.count({
+      where: {
+        monasterySpaceId,
+        user: { isDeleted: false },
+      },
+    }),
   ]);
 
-  const roleIds = Array.from(new Set(memberships.map((m) => m.role)));
-  const roles = await prisma.role.findMany({ where: { id: { in: roleIds } } });
-  const roleMap = new Map(roles.map((r) => [r.id, r.name]));
+  const distinctRoleIds = Array.from(
+    new Set(
+      memberships.map((m) => m.spaceRoleId).filter((id): id is number => typeof id === 'number')
+    )
+  );
+  const rolePermMap = new Map<number, string[]>();
+  await Promise.all(
+    distinctRoleIds.map(async (id) => {
+      rolePermMap.set(id, await getSpaceRolePermissions(id));
+    })
+  );
 
-  const items: MonasteryMemberDto[] = memberships.map((m) => ({
-    id: m.id,
-    userId: m.user.id,
-    name: m.user.name,
-    phone: m.user.phone,
-    monasterySpaceId: m.monasterySpaceId,
-    roleId: m.role,
-    roleName: roleMap.get(m.role) ?? null,
-    isOwner: m.isOwner,
-  }));
+  const items: MonasteryMemberDto[] = memberships.map((m) => {
+    const perms =
+      m.isOwner || m.spaceRoleId === SPACE_ROLES.SPACE_ADMIN
+        ? [...SPACE_PERMISSIONS]
+        : (rolePermMap.get(m.spaceRoleId) ?? []);
+
+    return {
+      id: m.id,
+      userId: m.user.id,
+      name: m.user.name,
+      phone: m.user.phone,
+      monasterySpaceId: m.monasterySpaceId,
+      spaceRoleId: m.spaceRoleId,
+      spaceRoleName: m.spaceRole?.name ?? null,
+      roleId: m.spaceRoleId,
+      roleName: m.spaceRole?.name ?? null,
+      isOwner: m.isOwner,
+      permissions: perms,
+    };
+  });
 
   return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
 };
@@ -570,18 +787,25 @@ export const updateMemberRoleService = async (
   currentUserId: number,
   monasterySpaceId: number,
   memberUserId: number,
-  request: UpdateMemberRoleInput
+  request: UpdateMemberRoleInput,
+  currentUserRoleId?: number
 ): Promise<MonasteryMemberDto> => {
   const actor = await getMember(currentUserId, monasterySpaceId);
-  if (!(await canManageMonastery(actor))) {
+  const isAdmin = await checkIsAdmin(currentUserId, currentUserRoleId);
+  if (!isAdmin && !(await canManageMonastery(actor))) {
     throw new AppError('User is not authorized to manage monastery members.', 403);
   }
 
-  const role = await prisma.role.findFirst({
-    where: { id: request.roleId, isDeleted: false },
+  const targetRoleId = request.spaceRoleId ?? request.roleId;
+  if (!targetRoleId) {
+    throw new AppError('Valid roleId is required.', 400);
+  }
+
+  const spaceRole = await prisma.spaceRole.findFirst({
+    where: { id: targetRoleId, isDeleted: false },
   });
-  if (!role) {
-    throw new AppError('Role not found.', 404);
+  if (!spaceRole) {
+    throw new AppError('Space role not found.', 404);
   }
 
   const member = await getMember(memberUserId, monasterySpaceId);
@@ -595,9 +819,14 @@ export const updateMemberRoleService = async (
 
   const updated = await prisma.monasteryMember.update({
     where: { id: member.id },
-    data: { role: request.roleId },
-    include: { user: { select: { id: true, name: true, phone: true } } },
+    data: { spaceRoleId: targetRoleId },
+    include: {
+      user: { select: { id: true, name: true, phone: true } },
+      spaceRole: true,
+    },
   });
+
+  const permissions = await resolveSpacePermissions(updated.spaceRoleId, updated.isOwner);
 
   return {
     id: updated.id,
@@ -605,9 +834,12 @@ export const updateMemberRoleService = async (
     name: updated.user.name,
     phone: updated.user.phone,
     monasterySpaceId: updated.monasterySpaceId,
-    roleId: updated.role,
-    roleName: role.name,
+    spaceRoleId: updated.spaceRoleId,
+    spaceRoleName: updated.spaceRole?.name ?? spaceRole.name,
+    roleId: updated.spaceRoleId,
+    roleName: updated.spaceRole?.name ?? spaceRole.name,
     isOwner: updated.isOwner,
+    permissions,
   };
 };
 
@@ -617,14 +849,26 @@ export const updateMemberRoleService = async (
 export const removeMemberService = async (
   currentUserId: number,
   monasterySpaceId: number,
-  memberUserId: number
+  memberUserId: number,
+  currentUserRoleId?: number
 ): Promise<MonasteryMemberDto> => {
   const actor = await getMember(currentUserId, monasterySpaceId);
-  if (!(await canManageMonastery(actor))) {
+  const isAdmin = await checkIsAdmin(currentUserId, currentUserRoleId);
+  if (!isAdmin && !(await canManageMonastery(actor))) {
     throw new AppError('User is not authorized to remove monastery members.', 403);
   }
 
-  const member = await getMember(memberUserId, monasterySpaceId);
+  const member = await prisma.monasteryMember.findFirst({
+    where: {
+      userId: memberUserId,
+      monasterySpaceId,
+      monasterySpace: { isDeleted: false },
+    },
+    include: {
+      spaceRole: true,
+      user: { select: { id: true, name: true, phone: true } },
+    },
+  });
   if (!member) {
     throw new AppError('Member not found.', 404);
   }
@@ -633,11 +877,14 @@ export const removeMemberService = async (
     throw new AppError('Owner member cannot be removed.', 400);
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: memberUserId },
-    select: { id: true, name: true, phone: true },
-  });
-  const role = await prisma.role.findUnique({ where: { id: member.role } });
+  const user =
+    member.user ??
+    (await prisma.user.findUnique({
+      where: { id: memberUserId },
+      select: { id: true, name: true, phone: true },
+    }));
+  const spaceRole =
+    member.spaceRole ?? (await prisma.spaceRole.findUnique({ where: { id: member.spaceRoleId } }));
 
   await prisma.monasteryMember.delete({ where: { id: member.id } });
 
@@ -647,9 +894,79 @@ export const removeMemberService = async (
     name: user?.name ?? null,
     phone: user?.phone ?? null,
     monasterySpaceId: member.monasterySpaceId,
-    roleId: member.role,
-    roleName: role?.name ?? null,
+    spaceRoleId: member.spaceRoleId,
+    spaceRoleName: spaceRole?.name ?? null,
+    roleId: member.spaceRoleId,
+    roleName: spaceRole?.name ?? null,
     isOwner: member.isOwner,
+    permissions: [],
+  };
+};
+
+export interface SpaceRoleDto {
+  roleId: number;
+  roleName: string;
+  description: string | null;
+  isDeleted: boolean;
+  permissions: FormattedPermission[];
+}
+
+/**
+ * Get all available space roles with their permissions
+ */
+export const getSpaceRolesService = async (): Promise<SpaceRoleDto[]> => {
+  const roles = await prisma.spaceRole.findMany({
+    where: { isDeleted: false },
+    orderBy: { id: 'asc' },
+    include: {
+      permissions: {
+        where: { isDeleted: false },
+        include: {
+          spacePermission: true,
+        },
+      },
+    },
+  });
+
+  return roles.map((role) => ({
+    roleId: role.id,
+    roleName: role.name,
+    description: role.description,
+    isDeleted: role.isDeleted,
+    permissions: role.permissions
+      .filter((p) => p.spacePermission && !p.spacePermission.isDeleted)
+      .map((p) => formatPermission(p.spacePermission)),
+  }));
+};
+
+/**
+ * Get space role by ID with its permissions
+ */
+export const getSpaceRoleByIdService = async (id: number): Promise<SpaceRoleDto> => {
+  const role = await prisma.spaceRole.findFirst({
+    where: { id, isDeleted: false },
+    include: {
+      permissions: {
+        where: { isDeleted: false },
+        include: {
+          spacePermission: true,
+        },
+      },
+    },
+  });
+
+  if (!role) {
+    throw new AppError('Space role not found.', 404);
+  }
+
+  return {
+    roleId: role.id,
+    roleName: role.name,
+    description: role.description,
+    isDeleted: role.isDeleted,
+    permissions: role.permissions
+      .filter((p) => p.spacePermission && !p.spacePermission.isDeleted)
+      .map((p) => formatPermission(p.spacePermission)),
   };
 };
 

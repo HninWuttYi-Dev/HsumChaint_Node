@@ -62,6 +62,92 @@ export const getRolePermissions = async (roleId: number): Promise<string[]> => {
 };
 
 /**
+ * Generates the Redis cache key for a given space role's permissions.
+ */
+export const getSpaceRolePermissionsCacheKey = (spaceRoleId: number): string => {
+  return `space_role:${spaceRoleId}:permissions`;
+};
+
+/**
+ * Retrieves the set of permission names assigned to a given space role.
+ * Utilizes Redis caching with fallback to Prisma Space_Role_Permission query.
+ */
+export const getSpaceRolePermissions = async (spaceRoleId: number): Promise<string[]> => {
+  const cacheKey = getSpaceRolePermissionsCacheKey(spaceRoleId);
+
+  // 1. Try fetching from Redis cache
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached) as string[];
+    }
+  } catch (err) {
+    console.error(`[Space RBAC] Redis cache error for space role ${spaceRoleId}:`, err);
+  }
+
+  // Fallback check if Prisma spaceRolePermission delegate is available
+  if (!prisma.spaceRolePermission?.findMany) {
+    return [];
+  }
+
+  // 2. Fetch from DB
+  const rolePermissions = await prisma.spaceRolePermission.findMany({
+    where: {
+      spaceRoleId,
+      isDeleted: false,
+      spaceRole: { isDeleted: false },
+      spacePermission: { isDeleted: false },
+    },
+    include: {
+      spacePermission: true,
+      spaceRole: true,
+    },
+  });
+
+  const permissions = rolePermissions
+    .map((rp) => rp.spacePermission?.name)
+    .filter((name): name is string => Boolean(name));
+
+  // 3. Populate Redis cache
+  try {
+    await redis.set(cacheKey, JSON.stringify(permissions), 'EX', ROLE_PERMISSIONS_CACHE_TTL);
+  } catch (err) {
+    console.error(`[Space RBAC] Failed to write cache for space role ${spaceRoleId}:`, err);
+  }
+
+  return permissions;
+};
+
+/**
+ * Clears cached permissions for a given space role, or all space roles if spaceRoleId is not provided.
+ */
+export const clearSpaceRolePermissionsCache = async (spaceRoleId?: number): Promise<void> => {
+  try {
+    if (spaceRoleId !== undefined) {
+      await redis.del(getSpaceRolePermissionsCacheKey(spaceRoleId));
+      return;
+    }
+
+    let cursor = '0';
+    do {
+      const [nextCursor, keys] = await redis.scan(
+        cursor,
+        'MATCH',
+        'space_role:*:permissions',
+        'COUNT',
+        100
+      );
+      cursor = nextCursor;
+      if (keys.length > 0) {
+        await redis.del(...keys);
+      }
+    } while (cursor !== '0');
+  } catch (err) {
+    console.error('[Space RBAC] Error invalidating space role permissions cache:', err);
+  }
+};
+
+/**
  * Clears cached permissions for a given role, or all roles if roleId is not provided.
  */
 export const clearRolePermissionsCache = async (roleId?: number): Promise<void> => {

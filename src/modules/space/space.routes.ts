@@ -9,6 +9,8 @@ import {
   deleteSpace,
   getSpaceById,
   getSpaceMembers,
+  getSpaceRoleById,
+  getSpaceRoles,
   getSpaces,
   inviteMember,
   removeSpaceMember,
@@ -32,6 +34,10 @@ export const spaceRouter = Router();
 // All space/monastery endpoints require authentication
 spaceRouter.use(authMiddleware);
 spaceRouter.use('/:spaceId/donations', createSpaceDonationRouter(donationService));
+
+// Space Roles catalog (e.g. Space Admin, Space Moderator, Space Editor, Space Member)
+spaceRouter.get('/roles', getSpaceRoles);
+spaceRouter.get('/roles/:id', validator(spaceIdParamSchema), getSpaceRoleById);
 
 // 1. Space / Monastery CRUD
 spaceRouter.post(

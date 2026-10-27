@@ -17,7 +17,15 @@ export const DONATION_NOTIFICATION_TYPE = 5; // Node already reserves 1-4 for in
 type Database = Pick<
   PrismaClient,
   '$transaction' | 'user' | 'monasterySpace' | 'monasteryMember' | 'rolePermission' | 'donorList'
->;
+> & {
+  spaceRolePermission?: PrismaClient['spaceRolePermission'];
+};
+type TxWithSpace = {
+  spaceRolePermission?: {
+    count: (args: unknown) => Promise<number>;
+    findMany: (args: unknown) => Promise<{ spaceRoleId: number }[]>;
+  };
+};
 type Tx = Prisma.TransactionClient;
 type Push = { token: string; message: string; donationId: number };
 type Delivery = {
@@ -103,16 +111,40 @@ export function createDonationService(db: Database, delivery: Delivery = {}) {
       },
     });
   }
+  const memberRoleId = (m: unknown): number =>
+    (m as { spaceRoleId?: number; role?: number }).spaceRoleId ??
+    (m as { spaceRoleId?: number; role?: number }).role ??
+    0;
+
   async function hasPermission(tx: Database | Tx, roleId: number, permission: DonationPermission) {
-    return (
+    const hasRolePerm =
       (await tx.rolePermission.count({
         where: {
           roleId,
           role: { isDeleted: false },
           permission: { isDeleted: false, name: { in: [permission, `Space.${permission}`] } },
         },
-      })) > 0
-    );
+      })) > 0;
+    if (hasRolePerm) return true;
+
+    const txWithSpace = tx as unknown as TxWithSpace;
+    if (typeof txWithSpace.spaceRolePermission?.count === 'function') {
+      const hasSpacePerm =
+        (await txWithSpace.spaceRolePermission.count({
+          where: {
+            spaceRoleId: roleId,
+            isDeleted: false,
+            spaceRole: { isDeleted: false },
+            spacePermission: {
+              isDeleted: false,
+              name: { in: [permission, `Space.${permission}`] },
+            },
+          },
+        })) > 0;
+      if (hasSpacePerm) return true;
+    }
+
+    return false;
   }
   async function manage(
     tx: Database | Tx,
@@ -123,7 +155,7 @@ export function createDonationService(db: Database, delivery: Delivery = {}) {
     const membership = await member(tx, userId, spaceId);
     if (
       !membership ||
-      (!membership.isOwner && !(await hasPermission(tx, membership.role, permission)))
+      (!membership.isOwner && !(await hasPermission(tx, memberRoleId(membership), permission)))
     )
       throw new AppError(`Missing space permission: ${permission}`, 403);
   }
@@ -161,9 +193,10 @@ export function createDonationService(db: Database, delivery: Delivery = {}) {
         monasterySpace: { isDeleted: false },
       },
     });
+    const memberRoleIds = members.map(memberRoleId);
     const reviewers = await tx.rolePermission.findMany({
       where: {
-        roleId: { in: members.map((m) => m.role) },
+        roleId: { in: memberRoleIds },
         role: { isDeleted: false },
         permission: {
           isDeleted: false,
@@ -172,9 +205,26 @@ export function createDonationService(db: Database, delivery: Delivery = {}) {
       },
       select: { roleId: true },
     });
-    const roles = new Set(reviewers.map((r) => r.roleId));
+    const matchedRoleIds = reviewers.map((r) => r.roleId);
+    const txWithSpace = tx as unknown as TxWithSpace;
+    if (typeof txWithSpace.spaceRolePermission?.findMany === 'function') {
+      const spaceReviewers = await txWithSpace.spaceRolePermission.findMany({
+        where: {
+          spaceRoleId: { in: memberRoleIds },
+          isDeleted: false,
+          spaceRole: { isDeleted: false },
+          spacePermission: {
+            isDeleted: false,
+            name: { in: ['Donation.Review', 'Space.Donation.Review'] },
+          },
+        },
+        select: { spaceRoleId: true },
+      });
+      matchedRoleIds.push(...spaceReviewers.map((r: { spaceRoleId: number }) => r.spaceRoleId));
+    }
+    const roles = new Set(matchedRoleIds);
     const users = new Set(
-      members.filter((m) => m.isOwner || roles.has(m.role)).map((m) => m.userId)
+      members.filter((m) => m.isOwner || roles.has(memberRoleId(m))).map((m) => m.userId)
     );
     for (const userId of users) await notify(tx, pushes, userId, message, donationId);
   }

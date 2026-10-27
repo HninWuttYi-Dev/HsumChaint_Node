@@ -94,7 +94,7 @@ export async function runReminders(now = new Date()) {
         include: {
           members: {
             where: {
-              OR: [{ isOwner: true }, { role: { in: [4, 5] } }],
+              OR: [{ isOwner: true }, { spaceRoleId: { in: [1, 2] } }],
               user: { isDeleted: false },
             },
           },

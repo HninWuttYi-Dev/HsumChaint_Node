@@ -42,10 +42,15 @@ export const inviteMemberSchema = z.object({
   }),
   body: z
     .object({
-      roleId: z.coerce.number().int().positive('Valid roleId is required'),
+      spaceRoleId: z.coerce.number().int().positive().optional(),
+      roleId: z.coerce.number().int().positive().optional(),
       userId: z.coerce.number().int().positive().optional(),
       phone: z.string().trim().optional(),
       phoneNumber: z.string().trim().optional(),
+    })
+    .refine((data) => data.spaceRoleId !== undefined || data.roleId !== undefined, {
+      message: 'Valid spaceRoleId or roleId is required',
+      path: ['roleId'],
     })
     .refine((data) => data.userId !== undefined || !!data.phone || !!data.phoneNumber, {
       message: 'Either userId, phone, or phoneNumber must be provided',
@@ -80,9 +85,15 @@ export const updateMemberRoleSchema = z.object({
     id: z.coerce.number().int().positive('Invalid space ID'),
     userId: z.coerce.number().int().positive('Invalid user ID'),
   }),
-  body: z.object({
-    roleId: z.coerce.number().int().positive('Valid roleId is required'),
-  }),
+  body: z
+    .object({
+      spaceRoleId: z.coerce.number().int().positive().optional(),
+      roleId: z.coerce.number().int().positive().optional(),
+    })
+    .refine((data) => data.spaceRoleId !== undefined || data.roleId !== undefined, {
+      message: 'Valid spaceRoleId or roleId is required',
+      path: ['roleId'],
+    }),
 });
 
 export const removeMemberSchema = z.object({

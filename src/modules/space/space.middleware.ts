@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { prisma } from '@/lib/prisma';
-import { getRolePermissions } from '@/middlewares/permissionMiddleware';
+import { getSpaceRolePermissions } from '@/middlewares/permissionMiddleware';
 import { AppError } from '@/utils/AppError';
 import type { SpacePermission } from './space.permissions';
 
@@ -8,7 +8,7 @@ export interface SpaceMemberContext {
   id: number;
   userId: number;
   monasterySpaceId: number;
-  role: number;
+  spaceRoleId: number;
   isOwner: boolean;
 }
 
@@ -62,7 +62,7 @@ export const checkSpacePermission = (requiredPermission: SpacePermission) => {
       }
 
       // 4. Dynamic RBAC check: retrieve permissions for the member's space role
-      const permissions = await getRolePermissions(member.role);
+      const permissions = await getSpaceRolePermissions(member.spaceRoleId);
 
       if (!permissions.includes(requiredPermission)) {
         return next(
